@@ -391,7 +391,7 @@ class Labeler():
         "Hardware: ", self.N_HW, "\n",
         "Software: ", self.N_SW, "\n",
         "HW&SW:    ", self.N_SWHW, "\n",
-        "Other:    ", self.N_tot - (self.N_SC + self.N_HW + self.N_SW), "\n",
+        "Other:    ", self.N_tot - (self.N_SC + self.N_HW + self.N_SW - self.N_SWHW), "\n",
         "Total:    ", self.N_tot)
 
 
