@@ -290,7 +290,7 @@ class Labeler():
         # update the model state for the user
         self.max_idx, self.weight_max = self.search_weight(weight=weight)
         self.sample_label['text'] = 'Sample: ' + str(self.max_idx)[:7]
-        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_tot)
+        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_tot) + "(" + str(self.samples_labeled_this_run) + ")"
         self.SC_count_label['text'] = "Security: " + str(self.N_SC) 
         self.HW_count_label['text'] = "Hardware: " + str(self.N_HW)
         self.SW_count_label['text'] = "Software: " + str(self.N_SW)
