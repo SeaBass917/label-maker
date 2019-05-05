@@ -127,18 +127,20 @@ class Labeler():
                 weights[1] /= weights[3]
                 weights[2] /= weights[3]
 
+                #try doubling weights that are near 0 or 1
+
                 # we arent going to count weights close to 0.5
                 # near 0.5 tells us the word doesnt really say 
                 # much about the sentance
-                if(weights[0] < 0.4 or 0.6 < weights[0]):
-                    sample_label[0] += weights[0]
-                    norm_SC += 1
-                if(weights[1] < 0.4 or 0.6 < weights[1]):
-                    sample_label[1] += weights[1]
-                    norm_HW += 1
-                if(weights[2] < 0.4 or 0.6 < weights[2]):
-                    sample_label[2] += weights[2]
-                    norm_SW += 1
+                #if(weights[0] < 0.4 or 0.6 < weights[0]):
+                sample_label[0] += weights[0]
+                norm_SC += 1
+                #if(weights[1] < 0.4 or 0.6 < weights[1]):
+                sample_label[1] += weights[1]
+                norm_HW += 1
+                #if(weights[2] < 0.4 or 0.6 < weights[2]):
+                sample_label[2] += weights[2]
+                norm_SW += 1
         
         # normalize
         if(norm_SC):
@@ -340,6 +342,42 @@ class Labeler():
         self.var_hw.set(0)
         self.var_sw.set(0)
 
+    # test the performance of the model based on the labeled samples
+    def test(self):
+
+        print("Evaluating performance...")
+
+        SC_acc = 0.0
+        SW_acc = 0.0
+        HW_acc = 0.0
+        labeled_count = 0
+
+        # for each labeled sample
+        for i, data in self.df.iterrows():
+            if not np.isnan(data.iloc[-1]):
+
+                # increment number of total labeled samples
+                labeled_count += 1
+
+                # calculate weight for this sample
+                sample_label = self.sample_weight(self.tokenize(self.df.loc[i,'MANUFACTURER_RECALL_REASON']))
+
+                # if the model is correct increment the the respective counter
+                if(abs(self.df.loc[i,'SECURITY'] - sample_label[0]) < 0.5):
+                    SC_acc += 1
+                if(abs(self.df.loc[i,'HW'] - sample_label[1]) < 0.5):
+                    HW_acc += 1
+                if(abs(self.df.loc[i,'SW'] - sample_label[2]) < 0.5):
+                    SW_acc += 1
+        
+        SC_acc /= labeled_count
+        HW_acc /= labeled_count
+        SW_acc /= labeled_count
+
+        print("Accuracy for Security Threats:", SC_acc)
+        print("Accuracy for Hardware Issues:", HW_acc)
+        print("Accuracy for Software Issues:", SW_acc)
+
     # start running the program
     def run(self):
         
@@ -401,4 +439,6 @@ class Labeler():
         # put it up
         main_window.mainloop()
 
-Labeler().run()
+l = Labeler()
+l.test()
+
