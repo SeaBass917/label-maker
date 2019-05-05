@@ -44,6 +44,12 @@ class Labeler():
                 self.N_SC += data.loc['SECURITY']
                 self.N_HW += data.loc['HW']
                 self.N_SW += data.loc['SW']
+        
+        # used for reat time perfomance analysis
+        self.samples_labeled_this_run = 0
+        self.SC_correct = 0
+        self.HW_correct = 0
+        self.SW_correct = 0
 
     # for when I edit the dataset manually
     def refresh_weights(self):
@@ -234,7 +240,21 @@ class Labeler():
 
         return idx_max, weight_max
     
-    def submit_confident(self):
+    def submit(self):
+
+        # calculate real time performance based on the submitted label
+        # and the models prediction
+        self.samples_labeled_this_run += 1
+        if(abs(self.var_sc.get() - self.weight_max[0]) < 0.5):
+            self.SC_correct += 1
+        if(abs(self.var_hw.get() - self.weight_max[1]) < 0.5):
+            self.HW_correct += 1
+        if(abs(self.var_sw.get() - self.weight_max[2]) < 0.5):
+            self.SW_correct += 1
+        
+        self.SC_perf['text'] = str(float(self.SC_correct) / float(self.samples_labeled_this_run))
+        self.HW_perf['text'] = str(float(self.HW_correct) / float(self.samples_labeled_this_run))
+        self.SW_perf['text'] = str(float(self.SW_correct) / float(self.samples_labeled_this_run))
 
         # label the dataframe
         self.df.iloc[self.max_idx,-3] = self.var_sc.get()
@@ -256,46 +276,30 @@ class Labeler():
         # update the weights based on the new label
         self.weight_update(words)
 
+    def submit_confident(self):
+        self.submit()
         self.next(weight=1.0)
     
     def submit_unconfident(self):
-
-        # label the dataframe
-        self.df.iloc[self.max_idx,-3] = self.var_sc.get()
-        self.df.iloc[self.max_idx,-2] = self.var_hw.get()
-        self.df.iloc[self.max_idx,-1] = self.var_sw.get()
-
-        # update how many labeled sampled there are
-        self.N_SC += self.var_sc.get()
-        self.N_HW += self.var_hw.get()
-        self.N_SW += self.var_sw.get()
-        self.N_tot += 1
-
-        # save the labels to local storage
-        self.save_data()
-
-        # tokenize the current sentance were looking at
-        words = self.tokenize(self.sentance)
-
-        # update the weights based on the new label
-        self.weight_update(words)
-
+        self.submit()
         self.next(weight=0.5)
 
     def next(self, weight=1.0):
 
-        # get unlabeled sample with highest confidence
-        self.max_idx, weight_max = self.search_weight(weight=weight)
+        # find sample and
+        # update the model state for the user
+        self.max_idx, self.weight_max = self.search_weight(weight=weight)
         self.sample_label['text'] = 'Sample: ' + str(self.max_idx)[:7]
-        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_tot) + "\nSecurity: " + str(self.N_SC) + "\nHardware: " + str(self.N_HW) + "\nSoftware: " + str(self.N_SW)
-        self.SC_label['text'] = ': ' + str(weight_max[0])
-        self.HW_label['text'] = ': ' + str(weight_max[1])
-        self.SW_label['text'] = ': ' + str(weight_max[2])
+        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_tot)
+        self.SC_count_label['text'] = "Security: " + str(self.N_SC) 
+        self.HW_count_label['text'] = "Hardware: " + str(self.N_HW)
+        self.SW_count_label['text'] = "Software: " + str(self.N_SW)
+        self.SC_label['text'] = ': ' + str(self.weight_max[0])
+        self.HW_label['text'] = ': ' + str(self.weight_max[1])
+        self.SW_label['text'] = ': ' + str(self.weight_max[2])
 
-        # get the highest confidence sentance
+        # paste that recall into the textbox
         self.sentance = self.df.loc[self.max_idx,'MANUFACTURER_RECALL_REASON']
-
-        # post it in the box
         self.text_box.delete('1.0', tk.END)
         self.text_box.insert(tk.END, self.sentance)
 
@@ -360,14 +364,14 @@ class Labeler():
                 labeled_count += 1
 
                 # calculate weight for this sample
-                sample_label = self.sample_weight(self.tokenize(self.df.loc[i,'MANUFACTURER_RECALL_REASON']))
+                sample_label = self.sample_weight(self.tokenize(data.loc['MANUFACTURER_RECALL_REASON']))
 
                 # if the model is correct increment the the respective counter
-                if(abs(self.df.loc[i,'SECURITY'] - sample_label[0]) < 0.5):
+                if(abs(data.loc['SECURITY'] - sample_label[0]) < 0.5):
                     SC_acc += 1
-                if(abs(self.df.loc[i,'HW'] - sample_label[1]) < 0.5):
+                if(abs(data.loc['HW'] - sample_label[1]) < 0.5):
                     HW_acc += 1
-                if(abs(self.df.loc[i,'SW'] - sample_label[2]) < 0.5):
+                if(abs(data.loc['SW'] - sample_label[2]) < 0.5):
                     SW_acc += 1
         
         SC_acc /= labeled_count
@@ -385,53 +389,71 @@ class Labeler():
 
         # main window
         main_window = tk.Tk()
-        main_window.title('Label Maker v2.1')
+        main_window.title('Label Maker v3.0')
         main_window.configure(bg='#404040')
  
-        tk.Button(main_window, bg='#404040', fg='#ffffff', text='>', height=20, command=self.next).grid(rowspan=6, column=4)
+        tk.Button(main_window, bg='#404040', fg='#ffffff', text='>', height=25, command=self.next).grid(rowspan=10, column=4)
         
-        # label to say the current sample number and how the weights feel about the sample
+        # label to say the current sample number (like an id)
         self.sample_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
-        self.sample_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
-        self.SC_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
-        self.HW_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
-        self.SW_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
         self.sample_label.grid(row=0, column=0, sticky=tk.W)
-        self.sample_count_label.grid(row=1, column=0, sticky=tk.W)
-        self.SC_label.grid(row=2, column=1, sticky=tk.W)
-        self.HW_label.grid(row=3, column=1, sticky=tk.W)
-        self.SW_label.grid(row=4, column=1, sticky=tk.W)
 
-        # this is where the text will be pasted
-        self.text_box = tk.Text(main_window, bg='#202020', fg='#ffffff', width=50, height=10)
-        self.text_box.grid(row=5, columnspan=3)
+        # Idsplay number of abeled samples, and specify each classes frequency
+        self.sample_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
+        self.SC_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
+        self.HW_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
+        self.SW_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
+        self.sample_count_label.grid(row=1, column=0, sticky=tk.W)
+        self.SC_count_label.grid(row=2, column=0, sticky=tk.W)
+        self.HW_count_label.grid(row=3, column=0, sticky=tk.W)
+        self.SW_count_label.grid(row=4, column=0, sticky=tk.W)
+        
+        # display a real time performance calc
+        self.SC_perf = tk.Label(main_window, text="<>", bg='#404040', fg='#ffffff')
+        self.HW_perf = tk.Label(main_window, text="<>", bg='#404040', fg='#ffffff')
+        self.SW_perf = tk.Label(main_window, text="<>", bg='#404040', fg='#ffffff')
+        self.SC_perf.grid(row=2, column=1, sticky=tk.W)
+        self.HW_perf.grid(row=3, column=1, sticky=tk.W)
+        self.SW_perf.grid(row=4, column=1, sticky=tk.W)
 
         # check boxes for voting
         self.var_sc = tk.IntVar()
         self.var_hw = tk.IntVar()
         self.var_sw = tk.IntVar()
-        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Security', variable=self.var_sc).grid(row=2, column=0, sticky=tk.W)
-        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Hardware', variable=self.var_hw).grid(row=3, column=0, sticky=tk.W)
-        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Software', variable=self.var_sw).grid(row=4, column=0, sticky=tk.W)
+        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Security', variable=self.var_sc).grid(row=5, column=0, sticky=tk.W)
+        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Hardware', variable=self.var_hw).grid(row=6, column=0, sticky=tk.W)
+        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Software', variable=self.var_sw).grid(row=7, column=0, sticky=tk.W)
 
+        # labels for the checkboxes
+        self.SC_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
+        self.HW_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
+        self.SW_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
+        self.SC_label.grid(row=5, column=1, sticky=tk.W)
+        self.HW_label.grid(row=6, column=1, sticky=tk.W)
+        self.SW_label.grid(row=7, column=1, sticky=tk.W)
+
+        # this is where the text will be pasted
+        self.text_box = tk.Text(main_window, bg='#202020', fg='#ffffff', width=50, height=10)
+        self.text_box.grid(row=8, columnspan=3)
+
+        # let the user decide what class we want to focus on
         self.search_label = tk.StringVar()
         self.search_label.set('Security')
-
-        # Change what class we want to focus on
         drop_down = tk.OptionMenu(main_window, self.search_label, *{'Security', 'Hardware', 'Software'})
         drop_down.configure(bg='#404040', fg='#ffffff')
         drop_down['menu'].configure(bg='#404040', fg='#ffffff')
-        drop_down.grid(row=6, column=0)
+        drop_down.grid(row=9, column=0)
         
         # submit the vote/label and get the next sample
-        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Submit\nGet Confident Sample', width=25, command=self.submit_confident).grid(row=6, column=1)
-        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Submit\nGet Unconfident Sample', width=25, command=self.submit_unconfident).grid(row=6, column=2)
+        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Submit\nGet Confident Sample', width=25, command=self.submit_confident).grid(row=9, column=1)
+        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Submit\nGet Unconfident Sample', width=25, command=self.submit_unconfident).grid(row=9, column=2)
 
+        # Allow user to search for keywords in unlabeled samples
         self.search_key = tk.StringVar()
         self.search_key.set("Battery...Software...Problem...")
-        tk.Label(main_window, text="Keyword Search", bg='#404040', fg='#ffffff').grid(row=7, column=0)
-        tk.Entry(main_window, textvariable=self.search_key, bg='#202020', fg='#ffffff').grid(row=7, column=1)
-        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Search', width=25, command=self.search_keyword).grid(row=7, column=2)
+        tk.Label(main_window, text="Keyword Search", bg='#404040', fg='#ffffff').grid(row=10, column=0)
+        tk.Entry(main_window, textvariable=self.search_key, bg='#202020', fg='#ffffff').grid(row=10, column=1)
+        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Search', width=25, command=self.search_keyword).grid(row=10, column=2)
 
         # call now to load the next(first) sample
         self.next()
@@ -440,5 +462,5 @@ class Labeler():
         main_window.mainloop()
 
 l = Labeler()
-l.test()
+l.run()
 
