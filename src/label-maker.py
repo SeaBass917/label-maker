@@ -550,4 +550,4 @@ class Labeler():
         main_window.mainloop()
 
 l = Labeler()
-l.test()
+l.run()
