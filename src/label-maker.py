@@ -349,14 +349,63 @@ class Labeler():
         self.var_hw.set(0)
         self.var_sw.set(0)
 
+    # use this to to get the top 15 keywords for the security class
+    # this is here and not very modular since I already have HW/SW from 
+    # alemzadeh et al.
+    def top_keyword_get(self):
+        
+        ma_top_15 = [["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]]
+
+
+        for kw in self.keywords:
+
+            # find lowest frequency word in the top 15
+            min_freq = 120123131123
+            ele = 0
+            for i, t15 in enumerate(ma_top_15):
+                if(t15[1] < min_freq):
+                    min_freq = t15[1]
+                    ele = i
+            
+            # if the current keyword frequency is greater than 
+            # the lowest frequency keyword in the list replace 
+            # that element on the list with the current keyword
+            if(min_freq < self.keywords[kw][0]):
+                ma_top_15[ele][0] = kw
+                ma_top_15[ele][1] = self.keywords[kw][0]
+        
+        print(ma_top_15)
+
     # test the performance of the model based on the labeled samples
     def test(self):
 
         print("Evaluating performance...")
 
-        SC_acc = 0.0
-        SW_acc = 0.0
-        HW_acc = 0.0
+        # the grep keywords from alemzadeh's work
+        keywords_SW = [ 'software', 'application', 'function', 'code', 
+                        'version', 'backup', 'database', 'program', 
+                        'bug', 'java', 'run', 'upgrade']
+        keywords_HW = [ 'board', 'chip', 'hardware', 'processor', 
+                        'memory', 'disk', 'PCB', 'electronic', 
+                        'electrical', 'circuit', 'leak', 'short-circuit', 
+                        'capacitor', 'transistor', 'resistor', 'battery', 
+                        'power', 'supply', 'outlet', 'plug', 'power-up', 
+                        'discharge', 'charger']
+
+        # grep keywords using Alemzadeh's approach but generated with my top 15 keywords
+        keywords_SC = ['one', 'system', 'patient', 'images', 'software', 'results', 
+                        'image', 'another', 'data', 'potential', 'incorrect', 'study', 
+                        'id', 'patients', 'may']
+
+        # accurcies for the weighted dictionary and grep approaches
+        SC_acc_WD = 0.0
+        SW_acc_WD = 0.0
+        HW_acc_WD = 0.0
+        SC_acc_grep = 0.0
+        SW_acc_grep = 0.0
+        HW_acc_grep = 0.0
         labeled_count = 0
 
         # for each labeled sample
@@ -366,24 +415,51 @@ class Labeler():
                 # increment number of total labeled samples
                 labeled_count += 1
 
-                # calculate weight for this sample
-                sample_label = self.sample_weight(self.tokenize(data.loc['MANUFACTURER_RECALL_REASON']))
+                # tokenize the sentance
+                sentence = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
 
-                # if the model is correct increment the the respective counter
+                # classify the sample using the grep approach
+                SC = 0.0
+                for word in sentence:
+                    if(word in keywords_SC):
+                        SC = 1.0
+                if(abs(data.loc['SECURITY'] - SC) < 0.5):
+                    SC_acc_grep += 1
+
+                HW = 0.0
+                for word in sentence:
+                    if(word in keywords_HW):
+                        HW = 1.0
+                if(abs(data.loc['HW'] - HW) < 0.5):
+                    HW_acc_grep += 1
+
+                SW = 0.0
+                for word in sentence:
+                    if(word in keywords_SW):
+                        SW = 1.0
+                if(abs(data.loc['SW'] - SW) < 0.5):
+                    SW_acc_grep += 1
+
+                # classify using the weighted dictionary
+                sample_label = self.sample_weight(sentence)
+
                 if(abs(data.loc['SECURITY'] - sample_label[0]) < 0.5):
-                    SC_acc += 1
+                    SC_acc_WD += 1
                 if(abs(data.loc['HW'] - sample_label[1]) < 0.5):
-                    HW_acc += 1
+                    HW_acc_WD += 1
                 if(abs(data.loc['SW'] - sample_label[2]) < 0.5):
-                    SW_acc += 1
+                    SW_acc_WD += 1
         
-        SC_acc /= labeled_count
-        HW_acc /= labeled_count
-        SW_acc /= labeled_count
+        SC_acc_WD /= labeled_count
+        HW_acc_WD /= labeled_count
+        SW_acc_WD /= labeled_count
+        SC_acc_grep /= labeled_count
+        HW_acc_grep /= labeled_count
+        SW_acc_grep /= labeled_count
 
-        print("Accuracy for Security Threats:", SC_acc)
-        print("Accuracy for Hardware Issues:", HW_acc)
-        print("Accuracy for Software Issues:", SW_acc)
+        print("Accuracy for Security Threats: WD [", SC_acc_WD, "] vs grep [", SC_acc_grep, "]")
+        print("Accuracy for Hardware Issues : WD [", HW_acc_WD, "] vs grep [", HW_acc_grep, "]")
+        print("Accuracy for Software Issues : WD [", SW_acc_WD, "] vs grep [", SW_acc_grep, "]")
 
     def summary(self):
         print("Class Frequencies\n",
@@ -393,7 +469,6 @@ class Labeler():
         "HW&SW:    ", self.N_SWHW, "\n",
         "Other:    ", self.N_tot - (self.N_SC + self.N_HW + self.N_SW - self.N_SWHW), "\n",
         "Total:    ", self.N_tot)
-
 
     # start running the program
     def run(self):
@@ -474,4 +549,5 @@ class Labeler():
         # put it up
         main_window.mainloop()
 
-Labeler().run()
+l = Labeler()
+l.test()
