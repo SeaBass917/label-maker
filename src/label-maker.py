@@ -37,6 +37,7 @@ class Labeler():
         self.N_SC = 0
         self.N_HW = 0
         self.N_SW = 0
+        self.N_SWHW = 0
         self.N_tot = 0
         for i, data in self.df.iterrows():
             if not np.isnan(data.iloc[-1]):
@@ -44,6 +45,8 @@ class Labeler():
                 self.N_SC += data.loc['SECURITY']
                 self.N_HW += data.loc['HW']
                 self.N_SW += data.loc['SW']
+                if(data.loc['SW'] == 1 and data.loc['HW'] == 1):
+                    self.N_SWHW += 1
         
         # used for reat time perfomance analysis
         self.samples_labeled_this_run = 0
@@ -382,6 +385,16 @@ class Labeler():
         print("Accuracy for Hardware Issues:", HW_acc)
         print("Accuracy for Software Issues:", SW_acc)
 
+    def summary(self):
+        print("Class Frequencies\n",
+        "Security: ", self.N_SC, "\n",
+        "Hardware: ", self.N_HW, "\n",
+        "Software: ", self.N_SW, "\n",
+        "HW&SW:    ", self.N_SWHW, "\n",
+        "Other:    ", self.N_tot - (self.N_SC + self.N_HW + self.N_SW), "\n",
+        "Total:    ", self.N_tot)
+
+
     # start running the program
     def run(self):
         
@@ -461,6 +474,4 @@ class Labeler():
         # put it up
         main_window.mainloop()
 
-l = Labeler()
-l.run()
-
+Labeler().run()
