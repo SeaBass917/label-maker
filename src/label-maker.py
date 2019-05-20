@@ -1,9 +1,11 @@
+import tkinter as tk
 import pandas as pd
 import numpy as np 
 import pickle as pk
 from enum import Enum
 import string
-import tkinter as tk
+import nltk
+nltk.download('stopwords') # stopwords 
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords 
 
@@ -186,6 +188,7 @@ class Labeler():
     # used to convert sentance to list of words
     # this removes stop words, punctuation, and numbers
     def tokenize(self, sentance):
+
         # tokenize the words, without punctuation
         words_ugly = word_tokenize(sentance.translate(dict((ord(char), None) for char in string.punctuation)), language='english')
 
@@ -196,7 +199,7 @@ class Labeler():
                 words_nonum.append(word)
         del words_ugly
 
-        # load the stop words (a, the, and...)
+        # load the stop words from nltk (a, the, and...)
         stop_words = set(stopwords.words('english'))
 
         # remove stop words and miss-spelled words
