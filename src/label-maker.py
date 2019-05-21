@@ -9,6 +9,9 @@ nltk.download('stopwords') # stopwords
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords 
 
+# TODO the dataset was broken into 2 files labeled and unlabeled data
+# Use the two rather than the one before labeling any new data
+
 # For converting strings to indecies
 # TODO try to remove this, its only being 
 # the dictionary indexing is much cleaner
@@ -21,7 +24,7 @@ class Labeler():
 
     # initialize the vocabulary with the address of the corpus we will be labeling
     def __init__(self, 
-                addr_data='../data/recall_labeled.csv', 
+                addr_data='../data/recall.csv', 
                 addr_weights='../data/weighted-dictionary.pk1'):
 
         # location in filesystem for the datasets
@@ -664,8 +667,6 @@ class Labeler():
 
         # put it up
         main_window.mainloop()
-
-
 
 l = Labeler()
 #SC, HW, SW = l.top_keyword_get()
