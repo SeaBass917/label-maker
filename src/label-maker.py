@@ -9,10 +9,6 @@ nltk.download('stopwords') # stopwords
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords 
 
-# weights are of the form (f_SECURITY, f_HW, f_SW, f_total)
-# frequency as an integer, not ratio, hense the f_total
-# 
-
 # for indexing the labels
 class Classes(Enum):
     Security = 0
@@ -24,7 +20,7 @@ class Labeler():
     # initialize the vocabulary with the address of the corpus we will be labeling
     def __init__(self, 
                 addr_data='../data/recall_labeled.csv', 
-                addr_weights='../data/recall_labeled-weights.pk1'):
+                addr_weights='../data/weighted-dictionary.pk1'):
 
         # location in filesystem for the datasets
         self.addr_data = addr_data
@@ -40,17 +36,17 @@ class Labeler():
         self.N_HW = 0
         self.N_SW = 0
         self.N_SWHW = 0
-        self.N_tot = 0
+        self.N_TOT = 0
         for i, data in self.df.iterrows():
             if not np.isnan(data.iloc[-1]):
-                self.N_tot += 1
-                self.N_SC += data.loc['SECURITY']
+                self.N_TOT += 1
+                self.N_SC += data.loc['SC']
                 self.N_HW += data.loc['HW']
                 self.N_SW += data.loc['SW']
                 if(data.loc['SW'] == 1 and data.loc['HW'] == 1):
                     self.N_SWHW += 1
         
-        # used for reat time perfomance analysis
+        # init vars used for real time perfomance analysis
         self.samples_labeled_this_run = 0
         self.SC_correct = 0
         self.HW_correct = 0
@@ -70,12 +66,12 @@ class Labeler():
                 sentance = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
                 for word in sentance:
                     if not word in self.keywords:
-                        self.keywords[word] = np.array([0,0,0,0])
+                        self.keywords[word] = {'SC':0, 'HW':0, 'SW':0, 'TOT':0}
 
-                    self.keywords[word][0] += data.loc['SECURITY']
-                    self.keywords[word][1] += data.loc['HW']
-                    self.keywords[word][2] += data.loc['SW']
-                    self.keywords[word][3] += 1
+                    self.keywords[word]['SC'] += data.loc['SC']
+                    self.keywords[word]['HW'] += data.loc['HW']
+                    self.keywords[word]['SW'] += data.loc['SW']
+                    self.keywords[word]['TOT'] += 1
         
         self.save_weights()
 
@@ -92,14 +88,14 @@ class Labeler():
 
             # if new word we need non null kw
             if weight is None:
-                weight = np.array([0,0,0,0])
+                weight = {'SC':0, 'HW':0, 'SW':0, 'TOT':0}
 
             # add the new labels to the prev total
             # note the labels are taken from the gui checkbox values which are 0 or 1
-            weight[0] += self.var_sc.get()
-            weight[1] += self.var_hw.get()
-            weight[2] += self.var_sw.get()
-            weight[3] += 1
+            weight['SC'] += self.var_sc.get()
+            weight['HW'] += self.var_hw.get()
+            weight['SW'] += self.var_sw.get()
+            weight['TOT'] += 1
 
             # store updated weight back in the keyword table
             self.keywords[word] = weight
@@ -118,7 +114,7 @@ class Labeler():
 
         # use these to normalize the weights
         # theyre isolated so we can ignore indecisive keywords
-        # (close to ~0.5)
+        # (weight ~= 0.5)
         norm_SC = 0.0
         norm_HW = 0.0
         norm_SW = 0.0
@@ -127,22 +123,29 @@ class Labeler():
         for word in words:
 
             # look up the freuencies in the table
-            weights = self.keywords.get(word)
+            freqs = self.keywords.get(word)
 
-            # if we arent in the table set to all zeros
-            if weights is not None:
+            # if the word isn't in the table, stay all zeros
+            if freqs is not None:
                 
-                weights = np.array(weights, dtype='float32')
+                # start a weight array with the keyword class frequencies
+                weights = np.array([
+                                    freqs['SC'],
+                                    freqs['HW'],
+                                    freqs['SW'],
+                                    freqs['TOT']
+                                    ], dtype='float32')
 
+                # calculate the ratio of words in each class to total word frequency
                 weights[0] /= weights[3]
                 weights[1] /= weights[3]
                 weights[2] /= weights[3]
 
-                #try doubling weights that are near 0 or 1
-
-                # we arent going to count weights close to 0.5
-                # near 0.5 tells us the word doesnt really say 
-                # much about the sentance
+                # TODO Explore more complex weight functions
+                # Currently just summing and normalizing the ratios
+                # - try doubling weights that are near 0 or 1
+                # - try ignoring weights (0.4, 0.6) as these words are ambiguous
+                
                 #if(weights[0] < 0.4 or 0.6 < weights[0]):
                 sample_label[0] += weights[0]
                 norm_SC += 1
@@ -190,6 +193,7 @@ class Labeler():
     def tokenize(self, sentance):
 
         # tokenize the words, without punctuation
+        # TODO wtf did I write here, this can't be the best way to do that
         words_ugly = word_tokenize(sentance.translate(dict((ord(char), None) for char in string.punctuation)), language='english')
 
         # remove numbers
@@ -210,12 +214,7 @@ class Labeler():
 
         return words
 
-    # find the index of the sample we 
-    # are most confident about
-    # The L2 norm will tell us which sample we are absoultely sure of one way or another
-    # a sum will specify that we are confident it is the classification 
-    # of the weighted label
-    # LIMIT TO SEARCHING SMALLER CHUNKS
+    # find the index of the sample whose weight is closest to the weight specified
     def search_weight(self, weight=1.0):
 
         # initialize min weight difference and idx
@@ -225,7 +224,7 @@ class Labeler():
         # check the dropdown box to see what class were looking for
         trait = Classes[self.search_label.get()].value
         
-        # loop through each of the elements
+        # loop through a random subset of the dataset
         for r in range(512):
             
             # grab sample a random
@@ -234,7 +233,7 @@ class Labeler():
             # if the last element is NaN then the data is unlabeled
             if np.isnan(self.df.iloc[i,-1]):
                 
-                # calculate weight for this sample
+                # get sample -> tokenize -> calculate weight
                 sample_label = self.sample_weight(self.tokenize(self.df.loc[i,'MANUFACTURER_RECALL_REASON']))
 
                 # update weight max
@@ -266,12 +265,12 @@ class Labeler():
         self.df.iloc[self.max_idx,-3] = self.var_sc.get()
         self.df.iloc[self.max_idx,-2] = self.var_hw.get()
         self.df.iloc[self.max_idx,-1] = self.var_sw.get()
-
+        
         # update how many labeled sampled there are
         self.N_SC += self.var_sc.get()
         self.N_HW += self.var_hw.get()
         self.N_SW += self.var_sw.get()
-        self.N_tot += 1
+        self.N_TOT += 1
 
         # save the labels to local storage
         self.save_data()
@@ -296,7 +295,7 @@ class Labeler():
         # update the model state for the user
         self.max_idx, self.weight_max = self.search_weight(weight=weight)
         self.sample_label['text'] = 'Sample: ' + str(self.max_idx)[:7]
-        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_tot) + "(" + str(self.samples_labeled_this_run) + ")"
+        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_TOT) + "(" + str(self.samples_labeled_this_run) + ")"
         self.SC_count_label['text'] = "Security: " + str(self.N_SC) 
         self.HW_count_label['text'] = "Hardware: " + str(self.N_HW)
         self.SW_count_label['text'] = "Software: " + str(self.N_SW)
@@ -338,7 +337,7 @@ class Labeler():
         
         weight_max = self.sample_weight(self.tokenize(self.sentance))
         self.sample_label['text'] = 'Sample: ' + str(self.max_idx)[:7]
-        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_tot) + "\nSecurity: " + str(self.N_SC) + "\nHardware: " + str(self.N_HW) + "\nSoftware: " + str(self.N_SW)
+        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_TOT) + "\nSecurity: " + str(self.N_SC) + "\nHardware: " + str(self.N_HW) + "\nSoftware: " + str(self.N_SW)
         self.SC_label['text'] = ': ' + str(weight_max[0])
         self.HW_label['text'] = ': ' + str(weight_max[1])
         self.SW_label['text'] = ': ' + str(weight_max[2])
@@ -352,34 +351,110 @@ class Labeler():
         self.var_hw.set(0)
         self.var_sw.set(0)
 
-    # use this to to get the top 15 keywords for the security class
-    # this is here and not very modular since I already have HW/SW from 
-    # alemzadeh et al.
+    # Find the top 100 keywords for each class
     def top_keyword_get(self):
         
-        ma_top_15 = [["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+        # use tuples to represent each class:
+        # (SC, SW, HW)
+        SC_top = [  ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]]
+        HW_top = [  ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]]
+        SW_top = [  ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
+                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
                     ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
                     ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]]
 
+        lowest_freqs = {'SC' : (0, 8675309), 'HW' : (0, 8675309), 'SW' : (0, 8675309)}
 
         for kw in self.keywords:
 
-            # find lowest frequency word in the top 15
-            min_freq = 120123131123
-            ele = 0
-            for i, t15 in enumerate(ma_top_15):
-                if(t15[1] < min_freq):
-                    min_freq = t15[1]
-                    ele = i
+            # refresh current min for each class
+            # initialize to monitor the element with the lowest frequency and what that frequency is; in the top 15's
+            # rather than re-sorting the list everytime im just gunna keep track of where the min is
+            # python is weird and too flexable, just init to a big number
+            lowest_freqs = {'SC' : (0, 8675309), 'HW' : (0, 8675309), 'SW' : (0, 8675309)}
+            for i, (SC, HW, SW) in enumerate(zip(SC_top, HW_top, SW_top)):
+                if(SC[1] <= lowest_freqs['SC'][1]):
+                    lowest_freqs['SC'] = (i, SC[1])
+                if(HW[1] <= lowest_freqs['HW'][1]):
+                    lowest_freqs['HW'] = (i, HW[1])
+                if(SW[1] <= lowest_freqs['SW'][1]):
+                    lowest_freqs['SW'] = (i, SW[1])
             
             # if the current keyword frequency is greater than 
-            # the lowest frequency keyword in the list replace 
-            # that element on the list with the current keyword
-            if(min_freq < self.keywords[kw][0]):
-                ma_top_15[ele][0] = kw
-                ma_top_15[ele][1] = self.keywords[kw][0]
+            # the lowest frequency keyword for that class then
+            # replace the lowest with the current
+            if(self.keywords[kw]['SC'] > lowest_freqs['SC'][1]):
+                SC_top[lowest_freqs['SC'][0]][0] = kw
+                SC_top[lowest_freqs['SC'][0]][1] = self.keywords[kw]['SC']
+            if(self.keywords[kw]['HW'] > lowest_freqs['HW'][1]):
+                HW_top[lowest_freqs['HW'][0]][0] = kw
+                HW_top[lowest_freqs['HW'][0]][1] = self.keywords[kw]['HW']
+            if(self.keywords[kw]['SW'] > lowest_freqs['SW'][1]):
+                SW_top[lowest_freqs['SW'][0]][0] = kw
+                SW_top[lowest_freqs['SW'][0]][1] = self.keywords[kw]['SW']
         
-        print(ma_top_15)
+        #print('Security')
+        #print(SC_top)
+        #print('Hardware')
+        #print(HW_top)
+        #print('Software')
+        #print(SW_top)
+
+        return (SC_top, HW_top, SW_top)
 
     # test the performance of the model based on the labeled samples
     def test(self):
@@ -426,7 +501,7 @@ class Labeler():
                 for word in sentence:
                     if(word in keywords_SC):
                         SC = 1.0
-                if(abs(data.loc['SECURITY'] - SC) < 0.5):
+                if(abs(data.loc['SC'] - SC) < 0.5):
                     SC_acc_grep += 1
 
                 HW = 0.0
@@ -446,7 +521,7 @@ class Labeler():
                 # classify using the weighted dictionary
                 sample_label = self.sample_weight(sentence)
 
-                if(abs(data.loc['SECURITY'] - sample_label[0]) < 0.5):
+                if(abs(data.loc['SC'] - sample_label[0]) < 0.5):
                     SC_acc_WD += 1
                 if(abs(data.loc['HW'] - sample_label[1]) < 0.5):
                     HW_acc_WD += 1
@@ -470,8 +545,8 @@ class Labeler():
         "Hardware: ", self.N_HW, "\n",
         "Software: ", self.N_SW, "\n",
         "HW&SW:    ", self.N_SWHW, "\n",
-        "Other:    ", self.N_tot - (self.N_SC + self.N_HW + self.N_SW - self.N_SWHW), "\n",
-        "Total:    ", self.N_tot)
+        "Other:    ", self.N_TOT - (self.N_SC + self.N_HW + self.N_SW - self.N_SWHW), "\n",
+        "Total:    ", self.N_TOT)
 
     # start running the program
     def run(self):
@@ -552,5 +627,16 @@ class Labeler():
         # put it up
         main_window.mainloop()
 
+
+
 l = Labeler()
+#SC, HW, SW = l.top_keyword_get()
+#print('Security')
+#print(SC)
+#print('Hardware')
+#print(HW)
+#print('Software')
+#print(SW)
+#l.test()
+#l.summary()
 l.run()
