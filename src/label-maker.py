@@ -139,7 +139,10 @@ class Labeler():
                                     ], dtype='float32')
 
                 # calculate the ratio of words in each class to total word frequency
-                weights[0] /= weights[3]
+                if(weights[2]):
+                    weights[0] /= weights[2]
+                else:
+                    weights[0] /= weights[3]
                 weights[1] /= weights[3]
                 weights[2] /= weights[3]
 
@@ -561,6 +564,28 @@ class Labeler():
         "Other:    ", self.N_TOT - (self.N_SC + self.N_HW + self.N_SW - self.N_SWHW), "\n",
         "Total:    ", self.N_TOT)
 
+    def determine_SC_SW_overlap(self):
+        (SC_top, _, SW_top) = self.top_keyword_get()
+
+        SC_SW_overlap = []
+
+        print('These words are the overlap between SC and SW')
+        for SC_word_freq in SC_top:
+            for SW_word_freq in SW_top:
+                if(SC_word_freq[0] == SW_word_freq[0]):
+                    SC_SW_overlap.append(SC_word_freq[0])
+                    print('SC', SC_word_freq, '\tSW', SW_word_freq)
+
+        print(float(len(SC_SW_overlap)) / float(len(SC_top)) * 100, '%% overlap between SC and SW keywords')
+
+        print('The following words are unique to Security threats')
+        for SC_word_freq in SC_top:
+            if(SC_word_freq[0] not in SC_SW_overlap):
+                print(SC_word_freq[0], SC_word_freq[1], '/', self.keywords[SC_word_freq[0]]['TOT'])
+
+
+        return SC_SW_overlap
+
     # start running the program
     def run(self):
         
@@ -650,6 +675,7 @@ l = Labeler()
 #print(HW)
 #print('Software')
 #print(SW)
+#l.determine_SC_SW_overlap()
 #l.test()
 #l.summary()
 l.run()
