@@ -9,7 +9,9 @@ nltk.download('stopwords') # stopwords
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords 
 
-# for indexing the labels
+# For converting strings to indecies
+# TODO try to remove this, its only being 
+# the dictionary indexing is much cleaner
 class Classes(Enum):
     Security = 0
     Hardware = 1
@@ -166,15 +168,18 @@ class Labeler():
         
         return sample_label
 
+    # technically its a method
     def dont_call_this_function(self):
         missing_the_magic_word = True
         while(missing_the_magic_word):
             print('ah ah ah, you didn\'t say the magic word')
 
+    # save the dictionary to a local file
     def save_weights(self):
         with open(self.addr_weights, 'wb') as f:
             pk.dump(self.keywords, f, pk.HIGHEST_PROTOCOL)
 
+    # read the dictionary from a local file
     def load_weights(self):
         try:
             with open(self.addr_weights, 'rb') as f:
@@ -182,9 +187,11 @@ class Labeler():
         except:
             self.keywords = {}
 
+    # save the labels to a local file
     def save_data(self):
         self.df.to_csv(self.addr_data, index=None)
 
+    # read the labels from a local file
     def load_data(self):
         self.df = pd.read_csv(self.addr_data)
 
@@ -245,6 +252,7 @@ class Labeler():
 
         return idx_max, weight_max
     
+    # commit a user specified label to the dictionary
     def submit(self):
 
         # calculate real time performance based on the submitted label
@@ -281,14 +289,17 @@ class Labeler():
         # update the weights based on the new label
         self.weight_update(words)
 
+    # submit + get next sample with weight closest to 1.0
     def submit_confident(self):
         self.submit()
         self.next(weight=1.0)
     
+    # submit + get next sample with weight closest to 0.5
     def submit_unconfident(self):
         self.submit()
         self.next(weight=0.5)
 
+    # search for a sample with the classification closest to 'weight'
     def next(self, weight=1.0):
 
         # find sample and
@@ -313,6 +324,7 @@ class Labeler():
         self.var_hw.set(0)
         self.var_sw.set(0)
 
+    # search for the next sample that contains the user specified keyword
     def search_keyword(self):
         # get search parameter from text box
         keyword = self.search_key.get()
@@ -539,6 +551,7 @@ class Labeler():
         print("Accuracy for Hardware Issues : WD [", HW_acc_WD, "] vs grep [", HW_acc_grep, "]")
         print("Accuracy for Software Issues : WD [", SW_acc_WD, "] vs grep [", SW_acc_grep, "]")
 
+    # print out a summary of the model
     def summary(self):
         print("Class Frequencies\n",
         "Security: ", self.N_SC, "\n",
