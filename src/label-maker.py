@@ -1,6 +1,6 @@
 import tkinter as tk
 import pandas as pd
-import numpy as np 
+import numpy as np
 import pickle as pk
 from enum import Enum
 import string
@@ -42,7 +42,7 @@ class Labeler():
         self.N_SW = 0
         self.N_SWHW = 0
         self.N_TOT = 0
-        for i, data in self.df.iterrows():
+        for _, data in self.df.iterrows():
             if not np.isnan(data.iloc[-1]):
                 self.N_TOT += 1
                 self.N_SC += data.loc['SC']
@@ -65,7 +65,7 @@ class Labeler():
 
         # loop through dataset, ignore unlabeled rows
         # recount the frequencies for the keywords
-        for i, data in self.df.iterrows():
+        for _, data in self.df.iterrows():
             if not np.isnan(data.iloc[-1]):
 
                 sentance = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
@@ -238,7 +238,7 @@ class Labeler():
         trait = Classes[self.search_label.get()].value
         
         # loop through a random subset of the dataset
-        for r in range(512):
+        for _ in range(512):
             
             # grab sample a random
             i = int(np.random.uniform(0, self.df.shape[0]))
@@ -505,7 +505,7 @@ class Labeler():
         labeled_count = 0
 
         # for each labeled sample
-        for i, data in self.df.iterrows():
+        for _, data in self.df.iterrows():
             if not np.isnan(data.iloc[-1]):
 
                 # increment number of total labeled samples
@@ -567,6 +567,7 @@ class Labeler():
         "Other:    ", self.N_TOT - (self.N_SC + self.N_HW + self.N_SW - self.N_SWHW), "\n",
         "Total:    ", self.N_TOT)
 
+    # Test to determine the keyword overlap between software and security
     def determine_SC_SW_overlap(self):
         (SC_top, _, SW_top) = self.top_keyword_get()
 
