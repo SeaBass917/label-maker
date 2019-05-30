@@ -5,13 +5,26 @@ import pickle as pk
 from enum import Enum
 import string
 import nltk
-nltk.download('stopwords') # stopwords 
+nltk.download('stopwords')  # stopwords 
+nltk.download('wordnet')    # lemmatizer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords 
+from nltk.stem import WordNetLemmatizer 
 
-# TODO the dataset was broken into 2 files labeled and unlabeled data
-# Use the two rather than the one before labeling any new data
+# Utility function to seperate the labeled vs unlabeled data
+def isolate_labeled():
+    
+    # read in the labeled and unlabeled dataset
+    df = pd.read_csv('../data/recall.csv')
 
+    # isolate the two
+    df_labeled = df.ix[~np.isnan(df['SC'])]
+    df_unlabeled = df.ix[np.isnan(df['SC'])]
+
+    # write them back to respective files
+    df_labeled.to_csv('../data/recall_labeled.csv', index=None)
+    df_unlabeled.to_csv('../data/recall_unlabeled.csv', index=None)
+    
 # For converting strings to indecies
 # TODO try to remove this, its only being 
 # the dictionary indexing is much cleaner
@@ -24,38 +37,76 @@ class Labeler():
 
     # initialize the vocabulary with the address of the corpus we will be labeling
     def __init__(self, 
-                addr_data='../data/recall.csv', 
+                addr_labeled_data='../data/recall_labeled.csv', 
+                addr_unlabeled_data='../data/recall_unlabeled.csv', 
                 addr_weights='../data/weighted-dictionary.pk1'):
 
         # location in filesystem for the datasets
-        self.addr_data = addr_data
+        self.addr_labeled_data = '../data/recall_labeled.csv'
+        self.addr_unlabeled_data = '../data/recall_unlabeled.csv'
         self.addr_weights = addr_weights
 
         # load the local data files
         self.load_data()
         self.load_weights()
 
-        # read the dataset and count how many 
-        # samples have labels on them
-        self.N_SC = 0
-        self.N_HW = 0
-        self.N_SW = 0
-        self.N_SWHW = 0
-        self.N_TOT = 0
-        for _, data in self.df.iterrows():
-            if not np.isnan(data.iloc[-1]):
-                self.N_TOT += 1
-                self.N_SC += data.loc['SC']
-                self.N_HW += data.loc['HW']
-                self.N_SW += data.loc['SW']
-                if(data.loc['SW'] == 1 and data.loc['HW'] == 1):
-                    self.N_SWHW += 1
-        
+        # if any of the metadata is missing recalculate it
+        if( not self.keywords.get('N_SC') or
+            not self.keywords.get('N_HW') or
+            not self.keywords.get('N_SW') or
+            not self.keywords.get('N_SCHW') or
+            not self.keywords.get('N_SCSW') or
+            not self.keywords.get('N_HWSW') or
+            not self.keywords.get('N_SCHWSW') or
+            not self.keywords.get('N_OTHER') or
+            not self.keywords.get('N_TOT') 
+        ):
+            print("\tWarning: Could not find metadata in dictionary. Recalculating...")
+
+            # initialize the metadata
+            self.keywords['N_SC'] = 0
+            self.keywords['N_HW'] = 0
+            self.keywords['N_SW'] = 0
+            self.keywords['N_SCHW'] = 0
+            self.keywords['N_SCSW'] = 0
+            self.keywords['N_HWSW'] = 0
+            self.keywords['N_SCHWSW'] = 0
+            self.keywords['N_OTHER'] = 0
+            self.keywords['N_TOT'] = 0
+
+            # loop through the labeled data and recalc the metainfo
+            for _, data in self.data_labeled.iterrows():
+                self.keywords['N_TOT'] += 1
+                self.keywords['N_SC'] += data.loc['SC']
+                self.keywords['N_HW'] += data.loc['HW']
+                self.keywords['N_SW'] += data.loc['SW']
+                if(data.loc['SC'] == 1 and data.loc['HW'] == 1):
+                    self.keywords['N_SCHW'] += 1
+                if(data.loc['SC'] == 1 and data.loc['SW'] == 1):
+                    self.keywords['N_SCSW'] += 1
+                if(data.loc['HW'] == 1 and data.loc['SW'] == 1):
+                    self.keywords['N_HWSW'] += 1
+                if(data.loc['SC'] == 1 and data.loc['HW'] == 1 and data.loc['SW'] == 1):
+                    self.keywords['N_SCHWSW'] += 1
+                if(data.loc['SC'] == 0 and data.loc['HW'] == 0 and data.loc['SW'] == 0):
+                    self.keywords['N_OTHER'] += 1
+
         # init vars used for real time perfomance analysis
         self.samples_labeled_this_run = 0
         self.SC_correct = 0
         self.HW_correct = 0
         self.SW_correct = 0
+
+        # alemzadeh's keywords
+        self.alem_keywords_HW = [   'board', 'chip', 'hardware', 'processor', 
+                                    'memory', 'disk', 'PCB', 'electronic', 
+                                    'electrical', 'circuit', 'leak', 'short-circuit', 
+                                    'capacitor', 'transistor', 'resistor', 'battery', 
+                                    'power', 'supply', 'outlet', 'plug', 'power-up', 
+                                    'discharge', 'charger']
+        self.alem_keywords_SW = [   'software', 'application', 'function', 'code', 
+                                    'version', 'backup', 'database', 'program', 
+                                    'bug', 'java', 'run', 'upgrade']
 
     # for when I edit the dataset manually
     def refresh_weights(self):
@@ -63,20 +114,19 @@ class Labeler():
         # new keywords dict
         self.keywords = {}
 
-        # loop through dataset, ignore unlabeled rows
+        # loop through the labeled dataset
         # recount the frequencies for the keywords
-        for _, data in self.df.iterrows():
-            if not np.isnan(data.iloc[-1]):
+        for _, data in self.data_labeled.iterrows():
 
-                sentance = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
-                for word in sentance:
-                    if not word in self.keywords:
-                        self.keywords[word] = {'SC':0, 'HW':0, 'SW':0, 'TOT':0}
+            sentance = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
+            for word in sentance:
+                if not word in self.keywords:
+                    self.keywords[word] = {'SC':0, 'HW':0, 'SW':0, 'TOT':0}
 
-                    self.keywords[word]['SC'] += data.loc['SC']
-                    self.keywords[word]['HW'] += data.loc['HW']
-                    self.keywords[word]['SW'] += data.loc['SW']
-                    self.keywords[word]['TOT'] += 1
+                self.keywords[word]['SC'] += data.loc['SC']
+                self.keywords[word]['HW'] += data.loc['HW']
+                self.keywords[word]['SW'] += data.loc['SW']
+                self.keywords[word]['TOT'] += 1
         
         self.save_weights()
 
@@ -191,41 +241,51 @@ class Labeler():
             with open(self.addr_weights, 'rb') as f:
                 self.keywords = pk.load(f)
         except:
-            self.keywords = {}
+            print('\tWarning: Dictionary not found, recalculating weights...')
+            self.refresh_weights()
 
-    # save the labels to a local file
+    # save the labeled and unlabeled data to local storage
     def save_data(self):
-        self.df.to_csv(self.addr_data, index=None)
+        self.data_labeled.to_csv(self.addr_labeled_data, index=None)
+        self.data_unlabeled.to_csv(self.addr_unlabeled_data, index=None)
 
-    # read the labels from a local file
+    # read the labeled and unlabeled data from local storage
     def load_data(self):
-        self.df = pd.read_csv(self.addr_data)
+        self.data_labeled = pd.read_csv(self.addr_labeled_data)
+        self.data_unlabeled = pd.read_csv(self.addr_unlabeled_data)
 
     # used to convert sentance to list of words
     # this removes stop words, punctuation, and numbers
     def tokenize(self, sentance):
 
-        # tokenize the words, without punctuation
-        # TODO wtf did I write here, this can't be the best way to do that
-        words_ugly = word_tokenize(sentance.translate(dict((ord(char), None) for char in string.punctuation)), language='english')
+        # Remove punctuation and digits
+        c_rm = '!"#$%&\'(),-.:;?@[]^`{|}~0123456789'   # Replace these with ''
+        c_rp = '*+/<=>\\_'                              # Replace these with ' '
+        sentance_clean = ''
+        for c in sentance:
+            if not c in c_rm:
+                if c in c_rp:
+                    sentance_clean += ' '
+                else:
+                    sentance_clean += c
 
-        # remove numbers
-        words_nonum = []
-        for word in words_ugly:
-            if not any(char.isdigit() for char in word):
-                words_nonum.append(word)
-        del words_ugly
+        # convert the setance to a list of words
+        words_unfiltered = word_tokenize(sentance_clean, language='english')
 
         # load the stop words from nltk (a, the, and...)
         stop_words = set(stopwords.words('english'))
 
+        # load the lammatizer (Rocks -> rock)
+        lemmatizer = WordNetLemmatizer()
+
         # remove stop words and miss-spelled words
         words = []
-        for word in words_nonum:
+        for word in words_unfiltered:
             if word.lower() not in stop_words:
-                words.append(word.lower())
+                words.append(lemmatizer.lemmatize(word.lower()))
 
         return words
+        words
 
     # find the index of the sample whose weight is closest to the weight specified
     def search_weight(self, weight=1.0):
@@ -238,25 +298,22 @@ class Labeler():
         trait = Classes[self.search_label.get()].value
         
         # loop through a random subset of the dataset
-        for _ in range(512):
+        for _ in range(min(512, self.data_unlabeled.shape[0])):
             
-            # grab sample a random
-            i = int(np.random.uniform(0, self.df.shape[0]))
-
-            # if the last element is NaN then the data is unlabeled
-            if np.isnan(self.df.iloc[i,-1]):
+            # grab sample at random
+            i = int(np.random.uniform(0, self.data_unlabeled.shape[0]))
                 
-                # get sample -> tokenize -> calculate weight
-                sample_label = self.sample_weight(self.tokenize(self.df.loc[i,'MANUFACTURER_RECALL_REASON']))
+            # get sample -> tokenize -> calculate weight
+            sample_label = self.sample_weight(self.tokenize(self.data_unlabeled.loc[i,'MANUFACTURER_RECALL_REASON']))
 
-                # update weight max
-                weight_diff = abs(weight - sample_label[trait])
-                if(weight_diff < weight_diff_min):
-                    weight_max = sample_label
-                    weight_diff_min = weight_diff
-                    idx_max = i
+            # update weight max
+            weight_diff = abs(weight - sample_label[trait])
+            if(weight_diff < weight_diff_min):
+                weight_cur = sample_label
+                weight_diff_min = weight_diff
+                idx_max = i
 
-        return idx_max, weight_max
+        return idx_max, weight_cur
     
     # commit a user specified label to the dictionary
     def submit(self):
@@ -264,29 +321,40 @@ class Labeler():
         # calculate real time performance based on the submitted label
         # and the models prediction
         self.samples_labeled_this_run += 1
-        if(abs(self.var_sc.get() - self.weight_max[0]) < 0.5):
+        if(abs(self.var_sc.get() - self.weight_cur[0]) < 0.5):
             self.SC_correct += 1
-        if(abs(self.var_hw.get() - self.weight_max[1]) < 0.5):
+        if(abs(self.var_hw.get() - self.weight_cur[1]) < 0.5):
             self.HW_correct += 1
-        if(abs(self.var_sw.get() - self.weight_max[2]) < 0.5):
+        if(abs(self.var_sw.get() - self.weight_cur[2]) < 0.5):
             self.SW_correct += 1
         
         self.SC_perf['text'] = str(float(self.SC_correct) / float(self.samples_labeled_this_run))
         self.HW_perf['text'] = str(float(self.HW_correct) / float(self.samples_labeled_this_run))
         self.SW_perf['text'] = str(float(self.SW_correct) / float(self.samples_labeled_this_run))
 
-        # label the dataframe
-        self.df.iloc[self.max_idx,-3] = self.var_sc.get()
-        self.df.iloc[self.max_idx,-2] = self.var_hw.get()
-        self.df.iloc[self.max_idx,-1] = self.var_sw.get()
+        # label this sample -> add it to the labeled data -> drop it from the unlabeled data
+        self.data_unlabeled.iloc[self.idx_cur,-3] = self.var_sc.get()
+        self.data_unlabeled.iloc[self.idx_cur,-2] = self.var_hw.get()
+        self.data_unlabeled.iloc[self.idx_cur,-1] = self.var_sw.get()
+        self.data_labeled = self.data_labeled.append(self.data_unlabeled.iloc[self.idx_cur], ignore_index=True)
+        self.data_unlabeled = self.data_unlabeled.drop(index=self.idx_cur)
+
         
         # update how many labeled sampled there are
-        self.N_SC += self.var_sc.get()
-        self.N_HW += self.var_hw.get()
-        self.N_SW += self.var_sw.get()
-        self.N_TOT += 1
+        self.keywords['N_SC'] += self.var_sc.get()
+        self.keywords['N_HW'] += self.var_hw.get()
+        self.keywords['N_SW'] += self.var_sw.get()
+        if(self.var_sc.get() and self.var_hw.get()):
+            self.keywords['N_SCHW'] += 1
+        if(self.var_sc.get() and self.var_sw.get()):
+            self.keywords['N_SCSW'] += 1
+        if(self.var_hw.get() and self.var_sw.get()):
+            self.keywords['N_HWSW'] += 1
+        if(self.var_sc.get() and self.var_hw.get() and self.var_sw.get()):
+            self.keywords['N_SCHWSW'] += 1
+        self.keywords['N_TOT'] += 1
 
-        # save the labels to local storage
+        # save the data updates to local storage
         self.save_data()
 
         # tokenize the current sentance were looking at
@@ -308,20 +376,21 @@ class Labeler():
     # search for a sample with the classification closest to 'weight'
     def next(self, weight=1.0):
 
-        # find sample and
-        # update the model state for the user
-        self.max_idx, self.weight_max = self.search_weight(weight=weight)
-        self.sample_label['text'] = 'Sample: ' + str(self.max_idx)[:7]
-        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_TOT) + "(" + str(self.samples_labeled_this_run) + ")"
-        self.SC_count_label['text'] = "Security: " + str(self.N_SC) 
-        self.HW_count_label['text'] = "Hardware: " + str(self.N_HW)
-        self.SW_count_label['text'] = "Software: " + str(self.N_SW)
-        self.SC_label['text'] = ': ' + str(self.weight_max[0])
-        self.HW_label['text'] = ': ' + str(self.weight_max[1])
-        self.SW_label['text'] = ': ' + str(self.weight_max[2])
+        # find next sample
+        self.idx_cur, self.weight_cur = self.search_weight(weight=weight)
 
-        # paste that recall into the textbox
-        self.sentance = self.df.loc[self.max_idx,'MANUFACTURER_RECALL_REASON']
+        # update the model state for the user
+        self.sample_label['text'] = 'Sample: ' + str(self.idx_cur)[:7]
+        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.keywords['N_TOT']) + "(" + str(self.samples_labeled_this_run) + ")"
+        self.SC_count_label['text'] = "Security: " + str(self.keywords['N_SC']) 
+        self.HW_count_label['text'] = "Hardware: " + str(self.keywords['N_HW'])
+        self.SW_count_label['text'] = "Software: " + str(self.keywords['N_SW'])
+        self.SC_label['text'] = ': ' + str(self.weight_cur[0])
+        self.HW_label['text'] = ': ' + str(self.weight_cur[1])
+        self.SW_label['text'] = ': ' + str(self.weight_cur[2])
+
+        # paste current recall into the textbox
+        self.sentance = self.data_unlabeled.loc[self.idx_cur,'MANUFACTURER_RECALL_REASON']
         self.text_box.delete('1.0', tk.END)
         self.text_box.insert(tk.END, self.sentance)
 
@@ -332,6 +401,7 @@ class Labeler():
 
     # search for the next sample that contains the user specified keyword
     def search_keyword(self):
+
         # get search parameter from text box
         keyword = self.search_key.get()
 
@@ -341,24 +411,29 @@ class Labeler():
 
         # get first unlabeled sample with a keyword match
         match = False
-        for i, data in self.df.iterrows():
-            if np.isnan(data.iloc[-1]):
-                self.sentance = data.loc['MANUFACTURER_RECALL_REASON']
-                if keyword in self.sentance:
-                    match = True
-                    self.max_idx = i
-                    break
+        for i, data in self.data_unlabeled.iterrows():
+            self.sentance = data.loc['MANUFACTURER_RECALL_REASON']
+            if keyword in self.sentance:
+                match = True
+                self.idx_cur = i
+                break
+
         # if there is no match then set these
         if not match:
             i = -1
             self.sentance = "<No Keyword Match>"
         
-        weight_max = self.sample_weight(self.tokenize(self.sentance))
-        self.sample_label['text'] = 'Sample: ' + str(self.max_idx)[:7]
-        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.N_TOT) + "\nSecurity: " + str(self.N_SC) + "\nHardware: " + str(self.N_HW) + "\nSoftware: " + str(self.N_SW)
-        self.SC_label['text'] = ': ' + str(weight_max[0])
-        self.HW_label['text'] = ': ' + str(weight_max[1])
-        self.SW_label['text'] = ': ' + str(weight_max[2])
+        self.weight_cur = self.sample_weight(self.tokenize(self.sentance))
+
+        # update the model state for the user
+        self.sample_label['text'] = 'Sample: ' + str(self.idx_cur)[:7]
+        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.keywords['N_TOT']) + "(" + str(self.samples_labeled_this_run) + ")"
+        self.SC_count_label['text'] = "Security: " + str(self.keywords['N_SC']) 
+        self.HW_count_label['text'] = "Hardware: " + str(self.keywords['N_HW'])
+        self.SW_count_label['text'] = "Software: " + str(self.keywords['N_SW'])
+        self.SC_label['text'] = ': ' + str(self.weight_cur[0])
+        self.HW_label['text'] = ': ' + str(self.weight_cur[1])
+        self.SW_label['text'] = ': ' + str(self.weight_cur[2])
 
         # post it in the box
         self.text_box.delete('1.0', tk.END)
@@ -472,30 +547,35 @@ class Labeler():
         #print('Software')
         #print(SW_top)
 
-        return (SC_top, HW_top, SW_top)
+        # sort them before you return them
+        return (SC_top.sort(key = lambda x: x[1]), HW_top.sort(key = lambda x: x[1]), SW_top.sort(key = lambda x: x[1]))
+
+    # for all top 15-50 keywords evaluate the grep approach
+    def sweep_grep(self):
+
+        # generate top 100 keywords for each class
+        # sorted from highest to lowest frequency
+        SC_keywords, HW_keywords, SW_keywords = self.top_keyword_get()
+
+        # loop through the various 
+        keyword_count = 15
+        while (keyword_count <= 50):
+
+            # limit the keywords to the top 'keyword_count' keywords
+            SC_keywords_ltd = SC_keywords[0:keyword_count-1]
+            HW_keywords_ltd = HW_keywords[0:keyword_count-1]
+            SW_keywords_ltd = SW_keywords[0:keyword_count-1]
+
+
+
+            keyword_count+=1
 
     # test the performance of the model based on the labeled samples
-    def test(self):
+    def test(self, keywords_HW, keywords_SW, keywords_SC):
 
         print("Evaluating performance...")
 
-        # the grep keywords from alemzadeh's work
-        keywords_SW = [ 'software', 'application', 'function', 'code', 
-                        'version', 'backup', 'database', 'program', 
-                        'bug', 'java', 'run', 'upgrade']
-        keywords_HW = [ 'board', 'chip', 'hardware', 'processor', 
-                        'memory', 'disk', 'PCB', 'electronic', 
-                        'electrical', 'circuit', 'leak', 'short-circuit', 
-                        'capacitor', 'transistor', 'resistor', 'battery', 
-                        'power', 'supply', 'outlet', 'plug', 'power-up', 
-                        'discharge', 'charger']
-
-        # grep keywords using Alemzadeh's approach but generated with my top 15 keywords
-        keywords_SC = ['one', 'system', 'patient', 'images', 'software', 'results', 
-                        'image', 'another', 'data', 'potential', 'incorrect', 'study', 
-                        'id', 'patients', 'may']
-
-        # accurcies for the weighted dictionary and grep approaches
+        # accuracies for the weighted dictionary and grep approaches
         SC_acc_WD = 0.0
         SW_acc_WD = 0.0
         HW_acc_WD = 0.0
@@ -505,46 +585,45 @@ class Labeler():
         labeled_count = 0
 
         # for each labeled sample
-        for _, data in self.df.iterrows():
-            if not np.isnan(data.iloc[-1]):
+        for _, data in self.data_labeled.iterrows():
 
-                # increment number of total labeled samples
-                labeled_count += 1
+            # increment number of total labeled samples
+            labeled_count += 1
 
-                # tokenize the sentance
-                sentence = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
+            # tokenize the sentance
+            sentence = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
 
-                # classify the sample using the grep approach
-                SC = 0.0
-                for word in sentence:
-                    if(word in keywords_SC):
-                        SC = 1.0
-                if(abs(data.loc['SC'] - SC) < 0.5):
-                    SC_acc_grep += 1
+            # classify the sample using the grep approach
+            SC = 0.0
+            for word in sentence:
+                if(word in keywords_SC):
+                    SC = 1.0
+            if(abs(data.loc['SC'] - SC) < 0.5):
+                SC_acc_grep += 1
 
-                HW = 0.0
-                for word in sentence:
-                    if(word in keywords_HW):
-                        HW = 1.0
-                if(abs(data.loc['HW'] - HW) < 0.5):
-                    HW_acc_grep += 1
+            HW = 0.0
+            for word in sentence:
+                if(word in keywords_HW):
+                    HW = 1.0
+            if(abs(data.loc['HW'] - HW) < 0.5):
+                HW_acc_grep += 1
 
-                SW = 0.0
-                for word in sentence:
-                    if(word in keywords_SW):
-                        SW = 1.0
-                if(abs(data.loc['SW'] - SW) < 0.5):
-                    SW_acc_grep += 1
+            SW = 0.0
+            for word in sentence:
+                if(word in keywords_SW):
+                    SW = 1.0
+            if(abs(data.loc['SW'] - SW) < 0.5):
+                SW_acc_grep += 1
 
-                # classify using the weighted dictionary
-                sample_label = self.sample_weight(sentence)
+            # classify using the weighted dictionary
+            sample_label = self.sample_weight(sentence)
 
-                if(abs(data.loc['SC'] - sample_label[0]) < 0.5):
-                    SC_acc_WD += 1
-                if(abs(data.loc['HW'] - sample_label[1]) < 0.5):
-                    HW_acc_WD += 1
-                if(abs(data.loc['SW'] - sample_label[2]) < 0.5):
-                    SW_acc_WD += 1
+            if(abs(data.loc['SC'] - sample_label[0]) < 0.5):
+                SC_acc_WD += 1
+            if(abs(data.loc['HW'] - sample_label[1]) < 0.5):
+                HW_acc_WD += 1
+            if(abs(data.loc['SW'] - sample_label[2]) < 0.5):
+                SW_acc_WD += 1
         
         SC_acc_WD /= labeled_count
         HW_acc_WD /= labeled_count
@@ -560,12 +639,15 @@ class Labeler():
     # print out a summary of the model
     def summary(self):
         print("Class Frequencies\n",
-        "Security: ", self.N_SC, "\n",
-        "Hardware: ", self.N_HW, "\n",
-        "Software: ", self.N_SW, "\n",
-        "HW&SW:    ", self.N_SWHW, "\n",
-        "Other:    ", self.N_TOT - (self.N_SC + self.N_HW + self.N_SW - self.N_SWHW), "\n",
-        "Total:    ", self.N_TOT)
+        "Security: ", self.keywords['N_SC'],    "\n",
+        "Hardware: ", self.keywords['N_HW'],    "\n",
+        "Software: ", self.keywords['N_SW'],    "\n",
+        "SC&HW:    ", self.keywords['N_SCHW'],  "\n",
+        "SC&SW:    ", self.keywords['N_SCSW'],  "\n",
+        "HW&SW:    ", self.keywords['N_HWSW'],  "\n",
+        "SC&HW&SW: ", self.keywords['N_SCHWSW'],"\n",
+        "Other:    ", self.keywords['N_OTHER'], "\n",
+        "Total:    ", self.keywords['N_TOT'],   "\n")
 
     # Test to determine the keyword overlap between software and security
     def determine_SC_SW_overlap(self):
@@ -669,15 +751,6 @@ class Labeler():
         # put it up
         main_window.mainloop()
 
+isolate_labeled()
 l = Labeler()
-#SC, HW, SW = l.top_keyword_get()
-#print('Security')
-#print(SC)
-#print('Hardware')
-#print(HW)
-#print('Software')
-#print(SW)
-#l.determine_SC_SW_overlap()
-#l.test()
-#l.summary()
 l.run()
