@@ -24,14 +24,6 @@ def isolate_labeled():
     # write them back to respective files
     df_labeled.to_csv('../data/recall_labeled.csv', index=None)
     df_unlabeled.to_csv('../data/recall_unlabeled.csv', index=None)
-    
-# For converting strings to indecies
-# TODO try to remove this, its only being 
-# the dictionary indexing is much cleaner
-class Classes(Enum):
-    Security = 0
-    Hardware = 1
-    Software = 2
 
 class Labeler():
 
@@ -49,7 +41,7 @@ class Labeler():
         # my stopwords that i find
         # TODO find scientific method of detecting these with 
         # cross class frequency analysis
-        self.my_stopwords = ['may', 'result', 'potential']
+        self.my_stopwords = ['may', 'result', 'potential', 'patient']
 
         # load the local data files
         self.load_data()
@@ -177,7 +169,7 @@ class Labeler():
     def sample_weight(self, words):
 
         # sum the weights
-        sample_label = np.array([0,0,0], dtype='float32')
+        sample_weight = {'SC': 0.0, 'HW': 0.0, 'SW': 0.0}
 
         # use these to normalize the weights
         # theyre isolated so we can ignore indecisive keywords
@@ -189,52 +181,41 @@ class Labeler():
         # loop through the words in the recall
         for word in words:
 
-            # look up the freuencies in the table
+            # look up the frequencies in the table
             freqs = self.keywords.get(word)
 
             # if the word isn't in the table, stay all zeros
             if freqs is not None:
-                
-                # start a weight array with the keyword class frequencies
-                weights = np.array([
-                                    freqs['SC'],
-                                    freqs['HW'],
-                                    freqs['SW'],
-                                    freqs['TOT']
-                                    ], dtype='float32')
-
-                # calculate the ratio of words in each class to total word frequency
-                if(weights[2]):
-                    weights[0] /= weights[2]
-                else:
-                    weights[0] /= weights[3]
-                weights[1] /= weights[3]
-                weights[2] /= weights[3]
 
                 # TODO Explore more complex weight functions
                 # Currently just summing and normalizing the ratios
                 # - try doubling weights that are near 0 or 1
                 # - try ignoring weights (0.4, 0.6) as these words are ambiguous
+
+                # calculate the ratio of words in each class to total word frequency
+                if(freqs['SC'] < 0.4 or 0.6 < freqs['SC']):
+                    if(freqs['SW']):
+                        sample_weight['SC'] += float(freqs['SC']) / freqs['SW']
+                    else:
+                        sample_weight['SC'] += float(freqs['SC']) / freqs['TOT']
+                    norm_SC += 1
+                if(freqs['HW'] < 0.4 or 0.6 < freqs['HW']):
+                    sample_weight['HW'] += float(freqs['HW']) / freqs['TOT']
+                    norm_HW += 1
+                if(freqs['HW'] < 0.4 or 0.6 < freqs['HW']):
+                    sample_weight['SW'] += float(freqs['SW']) / freqs['TOT']
+                    norm_SW += 1
                 
-                #if(weights[0] < 0.4 or 0.6 < weights[0]):
-                sample_label[0] += weights[0]
-                norm_SC += 1
-                #if(weights[1] < 0.4 or 0.6 < weights[1]):
-                sample_label[1] += weights[1]
-                norm_HW += 1
-                #if(weights[2] < 0.4 or 0.6 < weights[2]):
-                sample_label[2] += weights[2]
-                norm_SW += 1
         
         # normalize
         if(norm_SC):
-            sample_label[0] /= norm_SC
+            sample_weight['SC'] /= norm_SC
         if(norm_HW):
-            sample_label[1] /= norm_HW
+            sample_weight['HW'] /= norm_HW
         if(norm_SW):
-            sample_label[2] /= norm_SW
+            sample_weight['SW'] /= norm_SW
         
-        return sample_label
+        return sample_weight
 
     # technically its a method
     def dont_call_this_function(self):
@@ -305,9 +286,6 @@ class Labeler():
         # initialize min weight difference and idx
         weight_diff_min = 1
         idx_max = 0
-
-        # check the dropdown box to see what class were looking for
-        trait = Classes[self.search_label.get()].value
         
         # loop through a random subset of the dataset
         for _ in range(min(512, self.data_unlabeled.shape[0])):
@@ -319,7 +297,7 @@ class Labeler():
             sample_label = self.sample_weight(self.tokenize(self.data_unlabeled.loc[i,'MANUFACTURER_RECALL_REASON']))
 
             # update weight max
-            weight_diff = abs(weight - sample_label[trait])
+            weight_diff = abs(weight - sample_label[self.search_label.get()])
             if(weight_diff < weight_diff_min):
                 weight_cur = sample_label
                 weight_diff_min = weight_diff
@@ -333,11 +311,11 @@ class Labeler():
         # calculate real time performance based on the submitted label
         # and the models prediction
         self.samples_labeled_this_run += 1
-        if(abs(self.var_sc.get() - self.weight_cur[0]) < 0.5):
+        if(abs(self.var_sc.get() - self.weight_cur['SC']) < 0.5):
             self.SC_correct += 1
-        if(abs(self.var_hw.get() - self.weight_cur[1]) < 0.5):
+        if(abs(self.var_hw.get() - self.weight_cur['HW']) < 0.5):
             self.HW_correct += 1
-        if(abs(self.var_sw.get() - self.weight_cur[2]) < 0.5):
+        if(abs(self.var_sw.get() - self.weight_cur['SW']) < 0.5):
             self.SW_correct += 1
         
         self.SC_perf['text'] = str(float(self.SC_correct) / float(self.samples_labeled_this_run))
@@ -397,9 +375,9 @@ class Labeler():
         self.SC_count_label['text'] = "Security: " + str(self.keywords['N_SC']) 
         self.HW_count_label['text'] = "Hardware: " + str(self.keywords['N_HW'])
         self.SW_count_label['text'] = "Software: " + str(self.keywords['N_SW'])
-        self.SC_label['text'] = ': ' + str(self.weight_cur[0])
-        self.HW_label['text'] = ': ' + str(self.weight_cur[1])
-        self.SW_label['text'] = ': ' + str(self.weight_cur[2])
+        self.SC_label['text'] = ': ' + str(self.weight_cur['SC'])
+        self.HW_label['text'] = ': ' + str(self.weight_cur['HW'])
+        self.SW_label['text'] = ': ' + str(self.weight_cur['SW'])
 
         # paste current recall into the textbox
         self.sentance = self.data_unlabeled.loc[self.idx_cur,'MANUFACTURER_RECALL_REASON']
@@ -443,9 +421,9 @@ class Labeler():
         self.SC_count_label['text'] = "Security: " + str(self.keywords['N_SC']) 
         self.HW_count_label['text'] = "Hardware: " + str(self.keywords['N_HW'])
         self.SW_count_label['text'] = "Software: " + str(self.keywords['N_SW'])
-        self.SC_label['text'] = ': ' + str(self.weight_cur[0])
-        self.HW_label['text'] = ': ' + str(self.weight_cur[1])
-        self.SW_label['text'] = ': ' + str(self.weight_cur[2])
+        self.SC_label['text'] = ': ' + str(self.weight_cur['SC'])
+        self.HW_label['text'] = ': ' + str(self.weight_cur['HW'])
+        self.SW_label['text'] = ': ' + str(self.weight_cur['SW'])
 
         # post it in the box
         self.text_box.delete('1.0', tk.END)
@@ -588,6 +566,34 @@ class Labeler():
             for kw in keywords_SW:
                 if(word == kw[0]):
                     classifications['SW'] = 1
+
+        return classifications
+
+    # classify using the weighted dictionary approach
+    def clf_WD(self, sentance):
+
+        # tokenize the sentance
+        words = self.tokenize(sentance)
+
+        # initialize the classifications
+        classifications = {'SC': 0, 'HW': 0, 'SW': 0}
+
+        # get the weights for each class
+        weights = self.sample_weight(words)
+
+        # Boundary on 0.5
+        if(weights['SC'] < 0.5):
+            classifications['SC'] = 0
+        else:
+            classifications['SC'] = 1
+        if(weights['HW'] < 0.5):
+            classifications['HW'] = 0
+        else:
+            classifications['HW'] = 1
+        if(weights['SW'] < 0.5):
+            classifications['SW'] = 0
+        else:
+            classifications['SW'] = 1
 
         return classifications
 
@@ -826,8 +832,8 @@ class Labeler():
 
         # let the user decide what class we want to focus on
         self.search_label = tk.StringVar()
-        self.search_label.set('Security')
-        drop_down = tk.OptionMenu(main_window, self.search_label, *{'Security', 'Hardware', 'Software'})
+        self.search_label.set('SC')
+        drop_down = tk.OptionMenu(main_window, self.search_label, *{'SC', 'HW', 'SW'})
         drop_down.configure(bg='#404040', fg='#ffffff')
         drop_down['menu'].configure(bg='#404040', fg='#ffffff')
         drop_down.grid(row=9, column=0)
@@ -850,5 +856,4 @@ class Labeler():
         main_window.mainloop()
 
 l = Labeler()
-accs = l.sweep_grep()
-accs.to_csv("../data/grep-report.csv")
+l.run()
