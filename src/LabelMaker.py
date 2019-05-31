@@ -9,8 +9,7 @@
 # dictionary will attempt to classify presented samples online
 # allowing for real time observation of the performance.
 # ------------------------------------------------------------
-import WeightedDictionaryClf as wd
-import GrepClf as gp
+from WeightedDictionaryClf import WD
 
 import tkinter as tk
 import pandas as pd
@@ -33,7 +32,7 @@ class Labeler():
         self.load_data()
 
         # initialize the weighted dictionary classifier
-        self.weighted_dict = wd.WD(addr_weights=addr_weights)
+        self.weighted_dict = WD(addr_weights=addr_weights)
 
         # load the weights from local storage,
         # if that fails regenerate them with our labeled data
@@ -294,5 +293,15 @@ class Labeler():
         # put it up
         main_window.mainloop()
 
-l = Labeler()
-l.run()
+def main():
+
+    # X-validation
+    #w = WD()
+    #data_labeled = pd.read_csv('../data/recall_labeled.csv')
+    #accs = w.test(data_labeled, fold_count=8)
+    #accs.to_csv('../data/___8-fold_X-val.csv')
+    
+    l = Labeler()
+    l.run()
+
+main()

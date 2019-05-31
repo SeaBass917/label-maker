@@ -516,9 +516,3 @@ class WD():
 
 
         return SC_SW_overlap
-
-
-w = WD()
-data_labeled = pd.read_csv('../data/recall_labeled.csv')
-accs = w.test(data_labeled, fold_count=8)
-accs.to_csv('../data/___8-fold_X-val.csv')
