@@ -56,41 +56,41 @@ class Labeler():
         ]
 
         # if any of the metadata is missing recalculate it
-        if( not self.keywords.get('N_SC') or not self.keywords.get('N_HW') or
-            not self.keywords.get('N_SW') or not self.keywords.get('N_SCHW') or
-            not self.keywords.get('N_SCSW') or not self.keywords.get('N_HWSW') or
-            not self.keywords.get('N_SCHWSW') or not self.keywords.get('N_OTHER') or
-            not self.keywords.get('N_TOT') 
+        if( not self.weighted_dict.get('N_SC') or not self.weighted_dict.get('N_HW') or
+            not self.weighted_dict.get('N_SW') or not self.weighted_dict.get('N_SCHW') or
+            not self.weighted_dict.get('N_SCSW') or not self.weighted_dict.get('N_HWSW') or
+            not self.weighted_dict.get('N_SCHWSW') or not self.weighted_dict.get('N_OTHER') or
+            not self.weighted_dict.get('N_TOT') 
         ):
             print("\tWarning: Could not find metadata in dictionary. Recalculating...")
 
             # initialize the metadata
-            self.keywords['N_SC'] = 0
-            self.keywords['N_HW'] = 0
-            self.keywords['N_SW'] = 0
-            self.keywords['N_SCHW'] = 0
-            self.keywords['N_SCSW'] = 0
-            self.keywords['N_HWSW'] = 0
-            self.keywords['N_SCHWSW'] = 0
-            self.keywords['N_OTHER'] = 0
-            self.keywords['N_TOT'] = 0
+            self.weighted_dict['N_SC'] = 0
+            self.weighted_dict['N_HW'] = 0
+            self.weighted_dict['N_SW'] = 0
+            self.weighted_dict['N_SCHW'] = 0
+            self.weighted_dict['N_SCSW'] = 0
+            self.weighted_dict['N_HWSW'] = 0
+            self.weighted_dict['N_SCHWSW'] = 0
+            self.weighted_dict['N_OTHER'] = 0
+            self.weighted_dict['N_TOT'] = 0
 
             # loop through the labeled data and recalc the metainfo
             for _, data in self.data_labeled.iterrows():
-                self.keywords['N_TOT'] += 1
-                self.keywords['N_SC'] += data.loc['SC']
-                self.keywords['N_HW'] += data.loc['HW']
-                self.keywords['N_SW'] += data.loc['SW']
+                self.weighted_dict['N_TOT'] += 1
+                self.weighted_dict['N_SC'] += data.loc['SC']
+                self.weighted_dict['N_HW'] += data.loc['HW']
+                self.weighted_dict['N_SW'] += data.loc['SW']
                 if(data.loc['SC'] == 1 and data.loc['HW'] == 1):
-                    self.keywords['N_SCHW'] += 1
+                    self.weighted_dict['N_SCHW'] += 1
                 if(data.loc['SC'] == 1 and data.loc['SW'] == 1):
-                    self.keywords['N_SCSW'] += 1
+                    self.weighted_dict['N_SCSW'] += 1
                 if(data.loc['HW'] == 1 and data.loc['SW'] == 1):
-                    self.keywords['N_HWSW'] += 1
+                    self.weighted_dict['N_HWSW'] += 1
                 if(data.loc['SC'] == 1 and data.loc['HW'] == 1 and data.loc['SW'] == 1):
-                    self.keywords['N_SCHWSW'] += 1
+                    self.weighted_dict['N_SCHWSW'] += 1
                 if(data.loc['SC'] == 0 and data.loc['HW'] == 0 and data.loc['SW'] == 0):
-                    self.keywords['N_OTHER'] += 1
+                    self.weighted_dict['N_OTHER'] += 1
             
             # update with the new metadata
             self.save_weights()
@@ -115,26 +115,35 @@ class Labeler():
     # for when I edit the dataset manually
     def refresh_weights(self):
         
-        # new keywords dict
-        self.keywords = {}
+        # new weighted_dict dict fom the
+        self.weighted_dict = self.get_weighted_dict(self.data_labeled)
+        
+        # save the weights locally
+        self.save_weights()
+    
+    # Generate a weighted dictionary from a labeled dataset 
+    def get_weighted_dict(self, X):
+        
+        # new weighted_dict dict
+        weighted_dict = {}
 
         # loop through the labeled dataset
-        # recount the frequencies for the keywords
-        for _, data in self.data_labeled.iterrows():
+        # recount the frequencies for the weighted_dict
+        for _, data in X.iterrows():
 
             sentance = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
             for word in sentance:
-                if not word in self.keywords:
-                    self.keywords[word] = {'SC':0, 'HW':0, 'SW':0, 'TOT':0}
+                if not word in weighted_dict:
+                    weighted_dict[word] = {'SC':0, 'HW':0, 'SW':0, 'TOT':0}
 
-                self.keywords[word]['SC'] += data.loc['SC']
-                self.keywords[word]['HW'] += data.loc['HW']
-                self.keywords[word]['SW'] += data.loc['SW']
-                self.keywords[word]['TOT'] += 1
+                weighted_dict[word]['SC'] += data.loc['SC']
+                weighted_dict[word]['HW'] += data.loc['HW']
+                weighted_dict[word]['SW'] += data.loc['SW']
+                weighted_dict[word]['TOT'] += 1
         
-        self.save_weights()
+        return weighted_dict
 
-    # update the keywords and their weights 
+    # update the weighted_dict and their weights 
     # with the new list of words with their label
     def weight_update(self, words):
 
@@ -143,7 +152,7 @@ class Labeler():
         for word in words:
 
             # extract the weight tuple
-            weight = self.keywords.get(word)
+            weight = self.weighted_dict.get(word)
 
             # if new word we need non null kw
             if weight is None:
@@ -156,8 +165,8 @@ class Labeler():
             weight['SW'] += self.var_sw.get()
             weight['TOT'] += 1
 
-            # store updated weight back in the keyword table
-            self.keywords[word] = weight
+            # store updated weight back in the weighted dictionary
+            self.weighted_dict[word] = weight
 
         # save the weights
         self.save_weights()
@@ -172,7 +181,7 @@ class Labeler():
         sample_weight = {'SC': 0.0, 'HW': 0.0, 'SW': 0.0}
 
         # use these to normalize the weights
-        # theyre isolated so we can ignore indecisive keywords
+        # theyre isolated so we can ignore indecisive weighted_dict
         # (weight ~= 0.5)
         norm_SC = 0.0
         norm_HW = 0.0
@@ -182,7 +191,7 @@ class Labeler():
         for word in words:
 
             # look up the frequencies in the table
-            freqs = self.keywords.get(word)
+            freqs = self.weighted_dict.get(word)
 
             # if the word isn't in the table, stay all zeros
             if freqs is not None:
@@ -226,13 +235,13 @@ class Labeler():
     # save the dictionary to a local file
     def save_weights(self):
         with open(self.addr_weights, 'wb') as f:
-            pk.dump(self.keywords, f, pk.HIGHEST_PROTOCOL)
+            pk.dump(self.weighted_dict, f, pk.HIGHEST_PROTOCOL)
 
     # read the dictionary from a local file
     def load_weights(self):
         try:
             with open(self.addr_weights, 'rb') as f:
-                self.keywords = pk.load(f)
+                self.weighted_dict = pk.load(f)
         except:
             print('\tWarning: Dictionary not found, recalculating weights...')
             self.refresh_weights()
@@ -331,18 +340,18 @@ class Labeler():
 
         
         # update how many labeled sampled there are
-        self.keywords['N_SC'] += self.var_sc.get()
-        self.keywords['N_HW'] += self.var_hw.get()
-        self.keywords['N_SW'] += self.var_sw.get()
+        self.weighted_dict['N_SC'] += self.var_sc.get()
+        self.weighted_dict['N_HW'] += self.var_hw.get()
+        self.weighted_dict['N_SW'] += self.var_sw.get()
         if(self.var_sc.get() and self.var_hw.get()):
-            self.keywords['N_SCHW'] += 1
+            self.weighted_dict['N_SCHW'] += 1
         if(self.var_sc.get() and self.var_sw.get()):
-            self.keywords['N_SCSW'] += 1
+            self.weighted_dict['N_SCSW'] += 1
         if(self.var_hw.get() and self.var_sw.get()):
-            self.keywords['N_HWSW'] += 1
+            self.weighted_dict['N_HWSW'] += 1
         if(self.var_sc.get() and self.var_hw.get() and self.var_sw.get()):
-            self.keywords['N_SCHWSW'] += 1
-        self.keywords['N_TOT'] += 1
+            self.weighted_dict['N_SCHWSW'] += 1
+        self.weighted_dict['N_TOT'] += 1
 
         # save the data updates to local storage
         self.save_data()
@@ -371,10 +380,10 @@ class Labeler():
 
         # update the model state for the user
         self.sample_label['text'] = 'Sample: ' + str(self.idx_cur)[:7]
-        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.keywords['N_TOT']) + "(" + str(self.samples_labeled_this_run) + ")"
-        self.SC_count_label['text'] = "Security: " + str(self.keywords['N_SC']) 
-        self.HW_count_label['text'] = "Hardware: " + str(self.keywords['N_HW'])
-        self.SW_count_label['text'] = "Software: " + str(self.keywords['N_SW'])
+        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.weighted_dict['N_TOT']) + "(" + str(self.samples_labeled_this_run) + ")"
+        self.SC_count_label['text'] = "Security: " + str(self.weighted_dict['N_SC']) 
+        self.HW_count_label['text'] = "Hardware: " + str(self.weighted_dict['N_HW'])
+        self.SW_count_label['text'] = "Software: " + str(self.weighted_dict['N_SW'])
         self.SC_label['text'] = ': ' + str(self.weight_cur['SC'])
         self.HW_label['text'] = ': ' + str(self.weight_cur['HW'])
         self.SW_label['text'] = ': ' + str(self.weight_cur['SW'])
@@ -417,10 +426,10 @@ class Labeler():
 
         # update the model state for the user
         self.sample_label['text'] = 'Sample: ' + str(self.idx_cur)[:7]
-        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.keywords['N_TOT']) + "(" + str(self.samples_labeled_this_run) + ")"
-        self.SC_count_label['text'] = "Security: " + str(self.keywords['N_SC']) 
-        self.HW_count_label['text'] = "Hardware: " + str(self.keywords['N_HW'])
-        self.SW_count_label['text'] = "Software: " + str(self.keywords['N_SW'])
+        self.sample_count_label['text'] = 'Samples labeled: ' + str(self.weighted_dict['N_TOT']) + "(" + str(self.samples_labeled_this_run) + ")"
+        self.SC_count_label['text'] = "Security: " + str(self.weighted_dict['N_SC']) 
+        self.HW_count_label['text'] = "Hardware: " + str(self.weighted_dict['N_HW'])
+        self.SW_count_label['text'] = "Software: " + str(self.weighted_dict['N_SW'])
         self.SC_label['text'] = ': ' + str(self.weight_cur['SC'])
         self.HW_label['text'] = ': ' + str(self.weight_cur['HW'])
         self.SW_label['text'] = ': ' + str(self.weight_cur['SW'])
@@ -434,7 +443,7 @@ class Labeler():
         self.var_hw.set(0)
         self.var_sw.set(0)
 
-    # Find the top 100 keywords for each class
+    # Find the top 100 weighted_dict for each class
     def top_keyword_get(self):
         
         # use tuples to represent each class:
@@ -503,7 +512,7 @@ class Labeler():
         lowest_freqs = {'SC' : (0, 8675309), 'HW' : (0, 8675309), 'SW' : (0, 8675309)}
 
         # loop through kewords ignoring metadata
-        for kw in self.keywords:
+        for kw in self.weighted_dict:
             if(kw not in self.metadata_labels):
                 # refresh current min for each class
                 # initialize to monitor the element with the lowest frequency and what that frequency is; in the top 15's
@@ -521,15 +530,15 @@ class Labeler():
                 # if the current keyword frequency is greater than 
                 # the lowest frequency keyword for that class then
                 # replace the lowest with the current
-                if(self.keywords[kw]['SC'] > lowest_freqs['SC'][1]):
+                if(self.weighted_dict[kw]['SC'] > lowest_freqs['SC'][1]):
                     SC_top[lowest_freqs['SC'][0]][0] = kw
-                    SC_top[lowest_freqs['SC'][0]][1] = self.keywords[kw]['SC']
-                if(self.keywords[kw]['HW'] > lowest_freqs['HW'][1]):
+                    SC_top[lowest_freqs['SC'][0]][1] = self.weighted_dict[kw]['SC']
+                if(self.weighted_dict[kw]['HW'] > lowest_freqs['HW'][1]):
                     HW_top[lowest_freqs['HW'][0]][0] = kw
-                    HW_top[lowest_freqs['HW'][0]][1] = self.keywords[kw]['HW']
-                if(self.keywords[kw]['SW'] > lowest_freqs['SW'][1]):
+                    HW_top[lowest_freqs['HW'][0]][1] = self.weighted_dict[kw]['HW']
+                if(self.weighted_dict[kw]['SW'] > lowest_freqs['SW'][1]):
                     SW_top[lowest_freqs['SW'][0]][0] = kw
-                    SW_top[lowest_freqs['SW'][0]][1] = self.keywords[kw]['SW']
+                    SW_top[lowest_freqs['SW'][0]][1] = self.weighted_dict[kw]['SW']
         
         #print('Security')
         #print(SC_top)
@@ -545,7 +554,7 @@ class Labeler():
         return (SC_top, HW_top, SW_top)
     
     # classify using the grep approach
-    def clf_grep(self, sentance, keywords_SC, keywords_HW, keywords_SW):
+    def clf_grep(self, sentance, weighted_dict_SC, weighted_dict_HW, weighted_dict_SW):
 
         # tokenize the sentance
         words = self.tokenize(sentance)
@@ -553,17 +562,17 @@ class Labeler():
         # initialize the classifications
         classifications = {'SC': 0, 'HW': 0, 'SW': 0}
 
-        # for each class look for keywords, 
+        # for each class look for weighted_dict, 
         # flag a classification on a keyword match
-        # NOTE: keywords is a list of tuples
+        # NOTE: weighted_dict is a list of tuples
         for word in words:
-            for kw in keywords_SC:
+            for kw in weighted_dict_SC:
                 if(word == kw[0]):
                     classifications['SC'] = 1
-            for kw in keywords_HW:
+            for kw in weighted_dict_HW:
                 if(word == kw[0]):
                     classifications['HW'] = 1
-            for kw in keywords_SW:
+            for kw in weighted_dict_SW:
                 if(word == kw[0]):
                     classifications['SW'] = 1
 
@@ -597,14 +606,14 @@ class Labeler():
 
         return classifications
 
-    # for all top 1-100 keywords evaluate the grep approach
+    # for all top 1-100 weighted_dict evaluate the grep approach
     def sweep_grep(self):
 
-        print(" --- Sweeping the grep approach from 1 - 100 top keywords. --- ")
+        print(" --- Sweeping the grep approach from 1 - 100 top weighted_dict. --- ")
 
-        # generate top 100 keywords for each class
+        # generate top 100 weighted_dict for each class
         # sorted from highest to lowest frequency
-        SC_keywords, HW_keywords, SW_keywords = self.top_keyword_get()
+        SC_weighted_dict, HW_weighted_dict, SW_weighted_dict = self.top_keyword_get()
 
         # array of accuracies for each level we're sweeping
         # for each class of interest
@@ -617,12 +626,12 @@ class Labeler():
         # loop through each keyword limit
         for keyword_count in range(100):
 
-            print(keyword_count, "keywords...")
+            print(keyword_count, "weighted_dict...")
 
-            # limit the keywords to the top 'keyword_count' keywords
-            SC_keywords_ltd = SC_keywords[0:keyword_count+1]
-            HW_keywords_ltd = HW_keywords[0:keyword_count+1]
-            SW_keywords_ltd = SW_keywords[0:keyword_count+1]
+            # limit the weighted_dict to the top 'keyword_count' weighted_dict
+            SC_weighted_dict_ltd = SC_weighted_dict[0:keyword_count+1]
+            HW_weighted_dict_ltd = HW_weighted_dict[0:keyword_count+1]
+            SW_weighted_dict_ltd = SW_weighted_dict[0:keyword_count+1]
 
             correct = {
                 'SC': 0.0,
@@ -634,7 +643,7 @@ class Labeler():
             for _, data in self.data_labeled.iterrows():
 
                 # classify by grep approach
-                classifications = self.clf_grep(data.loc['MANUFACTURER_RECALL_REASON'], SC_keywords_ltd, HW_keywords_ltd, SW_keywords_ltd)
+                classifications = self.clf_grep(data.loc['MANUFACTURER_RECALL_REASON'], SC_weighted_dict_ltd, HW_weighted_dict_ltd, SW_weighted_dict_ltd)
 
                 # update the accuracy counter
                 if(abs(data.loc['SC'] - classifications['SC']) < 0.5):
@@ -650,7 +659,7 @@ class Labeler():
             accuracies.loc['HW', keyword_count] = correct['HW'] / self.data_labeled.shape[0]
             accuracies.loc['SW', keyword_count] = correct['SW'] / self.data_labeled.shape[0]
         
-        # one last round with just the almezedah keywords
+        # one last round with just the almezedah weighted_dict
         correct = {
                 'HW': 0.0,
                 'SW': 0.0
@@ -675,9 +684,26 @@ class Labeler():
         return accuracies
 
     # test the performance of the model based on the labeled samples
-    def test(self, keywords_HW, keywords_SW, keywords_SC):
+    def test(self, fold_count=10):
+
+        sample_per_fold = int(self.data_labeled.shape[0] / fold_count)
 
         print("Evaluating performance...")
+        print(fold_count, "fold cross validation;", sample_per_fold, "samples per fold.")
+
+        # sample all the rows at random (shuffling the dataset)
+        X = self.data_labeled.sample(frac=1.0) 
+
+        for r in range(fold_count):
+
+            # grab a fold of the data
+            X_test = X.loc[r*sample_per_fold : (r+1)*sample_per_fold, : ]
+
+            # the rest is training data
+            X_train = X.loc[0 : r*sample_per_fold, : ].append(X.loc[(r+1)*sample_per_fold : , : ], ignore_index=True)
+
+            # get a new dictionary
+            weighted_dict = self.get_weighted_dict(X_train)
 
         # accuracies for the weighted dictionary and grep approaches
         SC_acc_WD = 0.0
@@ -696,28 +722,6 @@ class Labeler():
 
             # tokenize the sentance
             sentence = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
-
-            # classify the sample using the grep approach
-            SC = 0.0
-            for word in sentence:
-                if(word in keywords_SC):
-                    SC = 1.0
-            if(abs(data.loc['SC'] - SC) < 0.5):
-                SC_acc_grep += 1
-
-            HW = 0.0
-            for word in sentence:
-                if(word in keywords_HW):
-                    HW = 1.0
-            if(abs(data.loc['HW'] - HW) < 0.5):
-                HW_acc_grep += 1
-
-            SW = 0.0
-            for word in sentence:
-                if(word in keywords_SW):
-                    SW = 1.0
-            if(abs(data.loc['SW'] - SW) < 0.5):
-                SW_acc_grep += 1
 
             # classify using the weighted dictionary
             sample_label = self.sample_weight(sentence)
@@ -743,15 +747,15 @@ class Labeler():
     # print out a summary of the model
     def summary(self):
         print("Class Frequencies\n",
-        "Security: ", self.keywords['N_SC'],    "\n",
-        "Hardware: ", self.keywords['N_HW'],    "\n",
-        "Software: ", self.keywords['N_SW'],    "\n",
-        "SC&HW:    ", self.keywords['N_SCHW'],  "\n",
-        "SC&SW:    ", self.keywords['N_SCSW'],  "\n",
-        "HW&SW:    ", self.keywords['N_HWSW'],  "\n",
-        "SC&HW&SW: ", self.keywords['N_SCHWSW'],"\n",
-        "Other:    ", self.keywords['N_OTHER'], "\n",
-        "Total:    ", self.keywords['N_TOT'],   "\n")
+        "Security: ", self.weighted_dict['N_SC'],    "\n",
+        "Hardware: ", self.weighted_dict['N_HW'],    "\n",
+        "Software: ", self.weighted_dict['N_SW'],    "\n",
+        "SC&HW:    ", self.weighted_dict['N_SCHW'],  "\n",
+        "SC&SW:    ", self.weighted_dict['N_SCSW'],  "\n",
+        "HW&SW:    ", self.weighted_dict['N_HWSW'],  "\n",
+        "SC&HW&SW: ", self.weighted_dict['N_SCHWSW'],"\n",
+        "Other:    ", self.weighted_dict['N_OTHER'], "\n",
+        "Total:    ", self.weighted_dict['N_TOT'],   "\n")
 
     # Test to determine the keyword overlap between software and security
     def determine_SC_SW_overlap(self):
@@ -766,12 +770,12 @@ class Labeler():
                     SC_SW_overlap.append(SC_word_freq[0])
                     print('SC', SC_word_freq, '\tSW', SW_word_freq)
 
-        print(float(len(SC_SW_overlap)) / float(len(SC_top)) * 100, '%% overlap between SC and SW keywords')
+        print(float(len(SC_SW_overlap)) / float(len(SC_top)) * 100, '%% overlap between SC and SW weighted_dict')
 
         print('The following words are unique to Security threats')
         for SC_word_freq in SC_top:
             if(SC_word_freq[0] not in SC_SW_overlap):
-                print(SC_word_freq[0], SC_word_freq[1], '/', self.keywords[SC_word_freq[0]]['TOT'])
+                print(SC_word_freq[0], SC_word_freq[1], '/', self.weighted_dict[SC_word_freq[0]]['TOT'])
 
 
         return SC_SW_overlap
@@ -842,7 +846,7 @@ class Labeler():
         tk.Button(main_window, bg='#404040', fg='#ffffff', text='Submit\nGet Confident Sample', width=25, command=self.submit_confident).grid(row=9, column=1)
         tk.Button(main_window, bg='#404040', fg='#ffffff', text='Submit\nGet Unconfident Sample', width=25, command=self.submit_unconfident).grid(row=9, column=2)
 
-        # Allow user to search for keywords in unlabeled samples
+        # Allow user to search for weighted_dict in unlabeled samples
         self.search_key = tk.StringVar()
         self.search_key.set("Battery...Software...Problem...")
         tk.Label(main_window, text="Keyword Search", bg='#404040', fg='#ffffff').grid(row=10, column=0)
