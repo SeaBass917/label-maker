@@ -1,6 +1,16 @@
-# ---------------------------------
+# ------------------------------------------------------------
+# S e a B a s s 
+# 2 0 1 9
 # 
-# ---------------------------------
+# WeightedDictionaryClf.py
+# 
+# Description - This classifier is a weighted dictionary. The 
+# dictionary stores the frequencies of each word used in 
+# classifying FDA recall data. Those frequencies are then used 
+# to determine the overall weight of a sentance amoung the 
+# three classes: Security Threats, Hardware Faults, and 
+# Software Faults.
+# ------------------------------------------------------------
 from Util import tokenize
 import pickle as pk
 import numpy as np
@@ -508,4 +518,7 @@ class WD():
         return SC_SW_overlap
 
 
-
+w = WD()
+data_labeled = pd.read_csv('../data/recall_labeled.csv')
+accs = w.test(data_labeled, fold_count=8)
+accs.to_csv('../data/___8-fold_X-val.csv')

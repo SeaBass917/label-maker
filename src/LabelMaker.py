@@ -1,13 +1,20 @@
-# ---------------------------------
+# ------------------------------------------------------------
+# S e a B a s s 
+# 2 0 1 9
 # 
-# ---------------------------------
+# LabelMaker.py
+# 
+# Description - This GUI allows users to label the FDA recall 
+# database while updating a weighted dictionary. This weighted
+# dictionary will attempt to classify presented samples online
+# allowing for real time observation of the performance.
+# ------------------------------------------------------------
 import WeightedDictionaryClf as wd
 import GrepClf as gp
+
 import tkinter as tk
 import pandas as pd
 import numpy as np
-from enum import Enum
-import string
 
 class Labeler():
 
@@ -288,6 +295,4 @@ class Labeler():
         main_window.mainloop()
 
 l = Labeler()
-#accs = l.test(fold_count=8)
-#accs.to_csv('../data/8-fold_X-val.csv')
 l.run()
