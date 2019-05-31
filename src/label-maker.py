@@ -175,7 +175,9 @@ class Labeler():
     # this weight is almost a prediction of sorts
     # bound between [0,1]
     # SUM(weight(word))/n_words
-    def sample_weight(self, words):
+    def weight_sentance(self, sentance, weighted_dict):
+        
+        words = self.tokenize(sentance)
 
         # sum the weights
         sample_weight = {'SC': 0.0, 'HW': 0.0, 'SW': 0.0}
@@ -191,7 +193,7 @@ class Labeler():
         for word in words:
 
             # look up the frequencies in the table
-            freqs = self.weighted_dict.get(word)
+            freqs = weighted_dict.get(word)
 
             # if the word isn't in the table, stay all zeros
             if freqs is not None:
@@ -202,16 +204,16 @@ class Labeler():
                 # - try ignoring weights (0.4, 0.6) as these words are ambiguous
 
                 # calculate the ratio of words in each class to total word frequency
-                if(freqs['SC'] < 0.4 or 0.6 < freqs['SC']):
+                if(freqs['SC'] < 0.5 or 0.5 < freqs['SC']):
                     if(freqs['SW']):
                         sample_weight['SC'] += float(freqs['SC']) / freqs['SW']
                     else:
                         sample_weight['SC'] += float(freqs['SC']) / freqs['TOT']
                     norm_SC += 1
-                if(freqs['HW'] < 0.4 or 0.6 < freqs['HW']):
+                if(freqs['HW'] < 0.5 or 0.5 < freqs['HW']):
                     sample_weight['HW'] += float(freqs['HW']) / freqs['TOT']
                     norm_HW += 1
-                if(freqs['HW'] < 0.4 or 0.6 < freqs['HW']):
+                if(freqs['HW'] < 0.5 or 0.5 < freqs['HW']):
                     sample_weight['SW'] += float(freqs['SW']) / freqs['TOT']
                     norm_SW += 1
                 
@@ -303,7 +305,7 @@ class Labeler():
             i = int(np.random.uniform(0, self.data_unlabeled.shape[0]))
                 
             # get sample -> tokenize -> calculate weight
-            sample_label = self.sample_weight(self.tokenize(self.data_unlabeled.loc[i,'MANUFACTURER_RECALL_REASON']))
+            sample_label = self.weight_sentance(self.data_unlabeled.loc[i,'MANUFACTURER_RECALL_REASON'], self.weighted_dict)
 
             # update weight max
             weight_diff = abs(weight - sample_label[self.search_label.get()])
@@ -422,7 +424,7 @@ class Labeler():
             i = -1
             self.sentance = "<No Keyword Match>"
         
-        self.weight_cur = self.sample_weight(self.tokenize(self.sentance))
+        self.weight_cur = self.weight_sentance(self.sentance, self.weighted_dict)
 
         # update the model state for the user
         self.sample_label['text'] = 'Sample: ' + str(self.idx_cur)[:7]
@@ -581,14 +583,11 @@ class Labeler():
     # classify using the weighted dictionary approach
     def clf_WD(self, sentance):
 
-        # tokenize the sentance
-        words = self.tokenize(sentance)
-
         # initialize the classifications
         classifications = {'SC': 0, 'HW': 0, 'SW': 0}
 
         # get the weights for each class
-        weights = self.sample_weight(words)
+        weights = self.weight_sentance(sentance, self.weighted_dict)
 
         # Boundary on 0.5
         if(weights['SC'] < 0.5):
@@ -694,55 +693,97 @@ class Labeler():
         # sample all the rows at random (shuffling the dataset)
         X = self.data_labeled.sample(frac=1.0) 
 
-        for r in range(fold_count):
+        accuracies = pd.DataFrame.from_dict({
+                'SC_test' : np.zeros(fold_count),
+                'SC_train' : np.zeros(fold_count),
+                'HW_test' : np.zeros(fold_count),
+                'HW_train' : np.zeros(fold_count),
+                'SW_test' : np.zeros(fold_count),
+                'SW_train' : np.zeros(fold_count)
+            },
+        orient='index')
+
+        for fold in range(fold_count):
+
+            print("Fold:", fold+1, "-----")
+            min_idx = fold*sample_per_fold
+            max_idx = (fold + 1) * sample_per_fold
 
             # grab a fold of the data
-            X_test = X.loc[r*sample_per_fold : (r+1)*sample_per_fold, : ]
+            X_test = X.iloc[min_idx : max_idx, : ]
 
             # the rest is training data
-            X_train = X.loc[0 : r*sample_per_fold, : ].append(X.loc[(r+1)*sample_per_fold : , : ], ignore_index=True)
+            X_train = X.iloc[0 : min_idx, : ].append(X.iloc[max_idx : -1, : ], ignore_index=True)
 
             # get a new dictionary
+            print("\t Calculating weights...", end='')
             weighted_dict = self.get_weighted_dict(X_train)
+            print("Done.")
 
-        # accuracies for the weighted dictionary and grep approaches
-        SC_acc_WD = 0.0
-        SW_acc_WD = 0.0
-        HW_acc_WD = 0.0
-        SC_acc_grep = 0.0
-        SW_acc_grep = 0.0
-        HW_acc_grep = 0.0
-        labeled_count = 0
+            # keep track of how many predictions were correct
+            correct = {
+                'SC': 0.0,
+                'HW': 0.0,
+                'SW': 0.0
+            }
 
-        # for each labeled sample
-        for _, data in self.data_labeled.iterrows():
+            # for each labeled test sample
+            print("\t Testing performance on the testing set...", end='')
+            for _, data in X_test.iterrows():
 
-            # increment number of total labeled samples
-            labeled_count += 1
+                # get the sentance
+                sentence = data.loc['MANUFACTURER_RECALL_REASON']
 
-            # tokenize the sentance
-            sentence = self.tokenize(data.loc['MANUFACTURER_RECALL_REASON'])
+                # calculate the weight for this sample
+                sample_label = self.weight_sentance(sentence, weighted_dict)
 
-            # classify using the weighted dictionary
-            sample_label = self.sample_weight(sentence)
+                # Compare the weight to the labele to determine correctness
+                if(abs(data.loc['SC'] - sample_label['SC']) < 0.5):
+                    correct['SC'] += 1.0
+                if(abs(data.loc['HW'] - sample_label['HW']) < 0.5):
+                    correct['HW'] += 1.0
+                if(abs(data.loc['SW'] - sample_label['SW']) < 0.5):
+                    correct['SW'] += 1.0
+            
+            # normalize and store in the dataframe
+            accuracies.loc['SC_test'][fold] = correct['SC'] / X_test.shape[0]
+            accuracies.loc['HW_test'][fold] = correct['HW'] / X_test.shape[0]
+            accuracies.loc['SW_test'][fold] = correct['SW'] / X_test.shape[0]
+            print("Done.")
 
-            if(abs(data.loc['SC'] - sample_label[0]) < 0.5):
-                SC_acc_WD += 1
-            if(abs(data.loc['HW'] - sample_label[1]) < 0.5):
-                HW_acc_WD += 1
-            if(abs(data.loc['SW'] - sample_label[2]) < 0.5):
-                SW_acc_WD += 1
+            # keep track of how many predictions were correct
+            correct = {
+                'SC': 0.0,
+                'HW': 0.0,
+                'SW': 0.0
+            }
+
+            # for each labeled training sample
+            print("\t Testing performance on the training set...", end='')
+            for _, data in X_train.iterrows():
+
+                # get the sentance
+                sentence = data.loc['MANUFACTURER_RECALL_REASON']
+
+                # calculate the weight for this sample
+                sample_label = self.weight_sentance(sentence, weighted_dict)
+
+                # Compare the weight to the labele to determine correctness
+                if(abs(data.loc['SC'] - sample_label['SC']) < 0.5):
+                    correct['SC'] += 1.0
+                if(abs(data.loc['HW'] - sample_label['HW']) < 0.5):
+                    correct['HW'] += 1.0
+                if(abs(data.loc['SW'] - sample_label['SW']) < 0.5):
+                    correct['SW'] += 1.0
+            
+            # normalize and store in the dataframe
+            accuracies.loc['SC_train'][fold] = correct['SC'] / X_train.shape[0]
+            accuracies.loc['HW_train'][fold] = correct['HW'] / X_train.shape[0]
+            accuracies.loc['SW_train'][fold] = correct['SW'] / X_train.shape[0]
+            print("Done.")
         
-        SC_acc_WD /= labeled_count
-        HW_acc_WD /= labeled_count
-        SW_acc_WD /= labeled_count
-        SC_acc_grep /= labeled_count
-        HW_acc_grep /= labeled_count
-        SW_acc_grep /= labeled_count
-
-        print("Accuracy for Security Threats: WD [", SC_acc_WD, "] vs grep [", SC_acc_grep, "]")
-        print("Accuracy for Hardware Issues : WD [", HW_acc_WD, "] vs grep [", HW_acc_grep, "]")
-        print("Accuracy for Software Issues : WD [", SW_acc_WD, "] vs grep [", SW_acc_grep, "]")
+        # done, return the dataframe
+        return accuracies
 
     # print out a summary of the model
     def summary(self):
@@ -860,4 +901,6 @@ class Labeler():
         main_window.mainloop()
 
 l = Labeler()
+#accs = l.test(fold_count=8)
+#accs.to_csv('../data/8-fold_X-val.csv')
 l.run()
