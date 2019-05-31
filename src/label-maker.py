@@ -45,20 +45,29 @@ class Labeler():
         self.addr_labeled_data = '../data/recall_labeled.csv'
         self.addr_unlabeled_data = '../data/recall_unlabeled.csv'
         self.addr_weights = addr_weights
+        
+        # my stopwords that i find
+        # TODO find scientific method of detecting these with 
+        # cross class frequency analysis
+        self.my_stopwords = ['may', 'result', 'potential']
 
         # load the local data files
         self.load_data()
         self.load_weights()
 
+        # set the metadata label
+        # so we know to ignore it
+        self.metadata_labels = [
+            'N_SC', 'N_HW', 'N_SW',
+            'N_SCHW', 'N_SCSW', 'N_HWSW',
+            'N_SCHWSW', 'N_OTHER', 'N_TOT'
+        ]
+
         # if any of the metadata is missing recalculate it
-        if( not self.keywords.get('N_SC') or
-            not self.keywords.get('N_HW') or
-            not self.keywords.get('N_SW') or
-            not self.keywords.get('N_SCHW') or
-            not self.keywords.get('N_SCSW') or
-            not self.keywords.get('N_HWSW') or
-            not self.keywords.get('N_SCHWSW') or
-            not self.keywords.get('N_OTHER') or
+        if( not self.keywords.get('N_SC') or not self.keywords.get('N_HW') or
+            not self.keywords.get('N_SW') or not self.keywords.get('N_SCHW') or
+            not self.keywords.get('N_SCSW') or not self.keywords.get('N_HWSW') or
+            not self.keywords.get('N_SCHWSW') or not self.keywords.get('N_OTHER') or
             not self.keywords.get('N_TOT') 
         ):
             print("\tWarning: Could not find metadata in dictionary. Recalculating...")
@@ -90,6 +99,9 @@ class Labeler():
                     self.keywords['N_SCHWSW'] += 1
                 if(data.loc['SC'] == 0 and data.loc['HW'] == 0 and data.loc['SW'] == 0):
                     self.keywords['N_OTHER'] += 1
+            
+            # update with the new metadata
+            self.save_weights()
 
         # init vars used for real time perfomance analysis
         self.samples_labeled_this_run = 0
@@ -281,7 +293,7 @@ class Labeler():
         # remove stop words and miss-spelled words
         words = []
         for word in words_unfiltered:
-            if word.lower() not in stop_words:
+            if (word.lower() not in stop_words) and (word.lower() not in self.my_stopwords):
                 words.append(lemmatizer.lemmatize(word.lower()))
 
         return words
@@ -512,33 +524,34 @@ class Labeler():
 
         lowest_freqs = {'SC' : (0, 8675309), 'HW' : (0, 8675309), 'SW' : (0, 8675309)}
 
+        # loop through kewords ignoring metadata
         for kw in self.keywords:
-
-            # refresh current min for each class
-            # initialize to monitor the element with the lowest frequency and what that frequency is; in the top 15's
-            # rather than re-sorting the list everytime im just gunna keep track of where the min is
-            # python is weird and too flexable, just init to a big number
-            lowest_freqs = {'SC' : (0, 8675309), 'HW' : (0, 8675309), 'SW' : (0, 8675309)}
-            for i, (SC, HW, SW) in enumerate(zip(SC_top, HW_top, SW_top)):
-                if(SC[1] <= lowest_freqs['SC'][1]):
-                    lowest_freqs['SC'] = (i, SC[1])
-                if(HW[1] <= lowest_freqs['HW'][1]):
-                    lowest_freqs['HW'] = (i, HW[1])
-                if(SW[1] <= lowest_freqs['SW'][1]):
-                    lowest_freqs['SW'] = (i, SW[1])
-            
-            # if the current keyword frequency is greater than 
-            # the lowest frequency keyword for that class then
-            # replace the lowest with the current
-            if(self.keywords[kw]['SC'] > lowest_freqs['SC'][1]):
-                SC_top[lowest_freqs['SC'][0]][0] = kw
-                SC_top[lowest_freqs['SC'][0]][1] = self.keywords[kw]['SC']
-            if(self.keywords[kw]['HW'] > lowest_freqs['HW'][1]):
-                HW_top[lowest_freqs['HW'][0]][0] = kw
-                HW_top[lowest_freqs['HW'][0]][1] = self.keywords[kw]['HW']
-            if(self.keywords[kw]['SW'] > lowest_freqs['SW'][1]):
-                SW_top[lowest_freqs['SW'][0]][0] = kw
-                SW_top[lowest_freqs['SW'][0]][1] = self.keywords[kw]['SW']
+            if(kw not in self.metadata_labels):
+                # refresh current min for each class
+                # initialize to monitor the element with the lowest frequency and what that frequency is; in the top 15's
+                # rather than re-sorting the list everytime im just gunna keep track of where the min is
+                # python is weird and too flexable, just init to a big number
+                lowest_freqs = {'SC' : (0, 8675309), 'HW' : (0, 8675309), 'SW' : (0, 8675309)}
+                for i, (SC, HW, SW) in enumerate(zip(SC_top, HW_top, SW_top)):
+                    if(SC[1] <= lowest_freqs['SC'][1]):
+                        lowest_freqs['SC'] = (i, SC[1])
+                    if(HW[1] <= lowest_freqs['HW'][1]):
+                        lowest_freqs['HW'] = (i, HW[1])
+                    if(SW[1] <= lowest_freqs['SW'][1]):
+                        lowest_freqs['SW'] = (i, SW[1])
+                
+                # if the current keyword frequency is greater than 
+                # the lowest frequency keyword for that class then
+                # replace the lowest with the current
+                if(self.keywords[kw]['SC'] > lowest_freqs['SC'][1]):
+                    SC_top[lowest_freqs['SC'][0]][0] = kw
+                    SC_top[lowest_freqs['SC'][0]][1] = self.keywords[kw]['SC']
+                if(self.keywords[kw]['HW'] > lowest_freqs['HW'][1]):
+                    HW_top[lowest_freqs['HW'][0]][0] = kw
+                    HW_top[lowest_freqs['HW'][0]][1] = self.keywords[kw]['HW']
+                if(self.keywords[kw]['SW'] > lowest_freqs['SW'][1]):
+                    SW_top[lowest_freqs['SW'][0]][0] = kw
+                    SW_top[lowest_freqs['SW'][0]][1] = self.keywords[kw]['SW']
         
         #print('Security')
         #print(SC_top)
@@ -548,27 +561,112 @@ class Labeler():
         #print(SW_top)
 
         # sort them before you return them
-        return (SC_top.sort(key = lambda x: x[1]), HW_top.sort(key = lambda x: x[1]), SW_top.sort(key = lambda x: x[1]))
+        SC_top.sort(key = lambda x: x[1], reverse=True)
+        HW_top.sort(key = lambda x: x[1], reverse=True)
+        SW_top.sort(key = lambda x: x[1], reverse=True)
+        return (SC_top, HW_top, SW_top)
+    
+    # classify using the grep approach
+    def clf_grep(self, sentance, keywords_SC, keywords_HW, keywords_SW):
 
-    # for all top 15-50 keywords evaluate the grep approach
+        # tokenize the sentance
+        words = self.tokenize(sentance)
+
+        # initialize the classifications
+        classifications = {'SC': 0, 'HW': 0, 'SW': 0}
+
+        # for each class look for keywords, 
+        # flag a classification on a keyword match
+        # NOTE: keywords is a list of tuples
+        for word in words:
+            for kw in keywords_SC:
+                if(word == kw[0]):
+                    classifications['SC'] = 1
+            for kw in keywords_HW:
+                if(word == kw[0]):
+                    classifications['HW'] = 1
+            for kw in keywords_SW:
+                if(word == kw[0]):
+                    classifications['SW'] = 1
+
+        return classifications
+
+    # for all top 1-100 keywords evaluate the grep approach
     def sweep_grep(self):
+
+        print(" --- Sweeping the grep approach from 1 - 100 top keywords. --- ")
 
         # generate top 100 keywords for each class
         # sorted from highest to lowest frequency
         SC_keywords, HW_keywords, SW_keywords = self.top_keyword_get()
 
-        # loop through the various 
-        keyword_count = 15
-        while (keyword_count <= 50):
+        # array of accuracies for each level we're sweeping
+        # for each class of interest
+        accuracies = pd.DataFrame.from_dict({  
+            'SC': np.zeros(100), 
+            'HW': np.zeros(100),
+            'SW': np.zeros(100)
+        }, orient='index')
+
+        # loop through each keyword limit
+        for keyword_count in range(100):
+
+            print(keyword_count, "keywords...")
 
             # limit the keywords to the top 'keyword_count' keywords
-            SC_keywords_ltd = SC_keywords[0:keyword_count-1]
-            HW_keywords_ltd = HW_keywords[0:keyword_count-1]
-            SW_keywords_ltd = SW_keywords[0:keyword_count-1]
+            SC_keywords_ltd = SC_keywords[0:keyword_count+1]
+            HW_keywords_ltd = HW_keywords[0:keyword_count+1]
+            SW_keywords_ltd = SW_keywords[0:keyword_count+1]
 
+            correct = {
+                'SC': 0.0,
+                'HW': 0.0,
+                'SW': 0.0
+            }
 
+            # for each labeled sample
+            for _, data in self.data_labeled.iterrows():
 
-            keyword_count+=1
+                # classify by grep approach
+                classifications = self.clf_grep(data.loc['MANUFACTURER_RECALL_REASON'], SC_keywords_ltd, HW_keywords_ltd, SW_keywords_ltd)
+
+                # update the accuracy counter
+                if(abs(data.loc['SC'] - classifications['SC']) < 0.5):
+                    correct['SC'] += 1.0
+                if(abs(data.loc['HW'] - classifications['HW']) < 0.5):
+                    correct['HW'] += 1.0
+                if(abs(data.loc['SW'] - classifications['SW']) < 0.5):
+                    correct['SW'] += 1.0
+
+            # divide by total samples to get accuracy
+            # and store that into the dataframe
+            accuracies.loc['SC', keyword_count] = correct['SC'] / self.data_labeled.shape[0]
+            accuracies.loc['HW', keyword_count] = correct['HW'] / self.data_labeled.shape[0]
+            accuracies.loc['SW', keyword_count] = correct['SW'] / self.data_labeled.shape[0]
+        
+        # one last round with just the almezedah keywords
+        correct = {
+                'HW': 0.0,
+                'SW': 0.0
+        }
+
+        # for each labeled sample
+        for _, data in self.data_labeled.iterrows():
+
+            # classify by grep approach
+            classifications = self.clf_grep(data.loc['MANUFACTURER_RECALL_REASON'], [], self.alem_keywords_HW, self.alem_keywords_SW)
+
+            # update the accuracy counter
+            if(abs(data.loc['HW'] - classifications['HW']) < 0.5):
+                correct['HW'] += 1.0
+            if(abs(data.loc['SW'] - classifications['SW']) < 0.5):
+                correct['SW'] += 1.0
+
+        accuracies.loc['Alem_HW', 0] = correct['HW'] / self.data_labeled.shape[0]
+        accuracies.loc['Alem_SW', 0] = correct['SW'] / self.data_labeled.shape[0]
+
+        # return the accuracies calculated
+        return accuracies
 
     # test the performance of the model based on the labeled samples
     def test(self, keywords_HW, keywords_SW, keywords_SC):
@@ -751,6 +849,6 @@ class Labeler():
         # put it up
         main_window.mainloop()
 
-isolate_labeled()
 l = Labeler()
-l.run()
+accs = l.sweep_grep()
+accs.to_csv("../data/grep-report.csv")
