@@ -7,6 +7,7 @@
 # Description - Used to support the Medical Device Recalls 
 # Data Classification project.
 # ------------------------------------------------------------
+
 import nltk
 nltk.download('stopwords')  # stopwords 
 nltk.download('wordnet')    # lemmatizer

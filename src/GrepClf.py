@@ -12,6 +12,10 @@ from Util import tokenize
 import pandas as pd
 import numpy as np
 
+# TODO find the best keywords by checking performance in real 
+# time and tuning to the best keywords in the top 100 that 
+# maximize performance
+
 class Grep():
 
     def __init__(self, keywords_SC, keywords_HW, keywords_SW):
@@ -33,6 +37,7 @@ class Grep():
         self.keywords_SW = keywords_SW
 
                                         # classify using the grep approach
+    
     def clf_sentance(self, sentance):
 
         # tokenize the sentance
