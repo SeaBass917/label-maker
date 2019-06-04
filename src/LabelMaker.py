@@ -145,7 +145,7 @@ class Labeler():
         self.weighted_dict.weight_update(self.sentance, y_SC=self.var_sc.get(), y_HW=self.var_hw.get(), y_SW=self.var_sw.get())
 
         # get next sample
-        if(self.isUncertain):
+        if(self.isUncertain.get()):
             self.next(weight=0.5)
         else:
             self.next()
@@ -289,7 +289,7 @@ class Labeler():
         drop_down['menu'].configure(bg='#404040', fg='#ffffff')
         drop_down.grid(row=7, column=1, padx=3, pady=3)
         
-        # submit the vote/label and get the next sample
+        # submit the label and get the next sample
         tk.Button(main_window, bg='#404040', fg='#ffffff', text='Submit', height=3, width=15, bd=3, command=self.submit).grid(row=7, rowspan=2, column=3, padx=3, pady=3)
 
         # Allow user to search for weighted_dict in unlabeled samples

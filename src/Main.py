@@ -136,10 +136,10 @@ def main():
     #data_labeled = pd.read_csv('../data/recall_labeled.csv')
     #data_ss_labeled = pd.read_csv('../data/data-ss-labeled_800.csv')
 
-    #print("--- True Label ---")
+    #print("--- True Labels ---")
     #print_stats(data_labeled)
 
-    #print("--- Model Label ---")
+    #print("--- Model Labels ---")
     #print_stats(data_ss_labeled)
 
     l = Labeler()
