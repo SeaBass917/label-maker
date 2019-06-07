@@ -22,11 +22,6 @@ import numpy as np
 # this removes stop words, punctuation, and numbers
 def tokenize(sentance):
 
-    # my stopwords that i find
-    # TODO find scientific method of detecting these with 
-    # cross class frequency analysis
-    my_stopwords = ['may', 'result', 'potential', 'patient']
-
     # Remove punctuation and digits
     c_rm = '!"#$%&\'(),-.:;?@[]^`{|}~0123456789'   # Replace these with ''
     c_rp = '*+/<=>\\_'                              # Replace these with ' '
@@ -50,7 +45,7 @@ def tokenize(sentance):
     # remove stop words and miss-spelled words
     words = []
     for word in words_unfiltered:
-        if (word.lower() not in stop_words) and (word.lower() not in my_stopwords):
+        if word.lower() not in stop_words:
             words.append(lemmatizer.lemmatize(word.lower()))
 
     return words

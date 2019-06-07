@@ -33,6 +33,9 @@ class WD():
         ]
 
         self.weighted_dict = {}
+        self.my_stopwords_SC = []
+        self.my_stopwords_HW = []
+        self.my_stopwords_SW = []
 
     # overload the brackets to just index the internal dictionary
     def __getitem__(self, key):
@@ -71,6 +74,7 @@ class WD():
         try:
             with open(load_addr, 'rb') as f:
                 self.weighted_dict = pk.load(f)
+                self.my_stopwords_SC, self.my_stopwords_HW, self.my_stopwords_SW = self.get_stop_words()   # get stopwords at this point
                 success = True
         except:
             print('\tWarning!: No dictionary found at: \"', load_addr, '\".')
@@ -105,7 +109,10 @@ class WD():
         
         # new weighted_dict dict fom the
         self.weighted_dict = self.get_weighted_dict(data_labeled)
-    
+
+        # refresh stopwords while im here
+        self.my_stopwords_SC, self.my_stopwords_HW, self.my_stopwords_SW = self.get_stop_words()   # get stopwords at this point
+                
     # Generate a weighted dictionary from a labeled dataset 
     def get_weighted_dict(self, data_labeled):
         
@@ -190,49 +197,63 @@ class WD():
     # this weight is almost a prediction of sorts
     # bound between [0,1]
     # SUM(weight(word))/n_words
+    # TODO Explore more complex weight functions
+    # - try some logistic functions
     def weight_sentance(self, sentance, weighted_dict):
         
-        words = tokenize(sentance)
+        words_unclean = tokenize(sentance)
+
+        words_SC = [word for word in words_unclean if word not in self.my_stopwords_SC]
+        words_HW = [word for word in words_unclean if word not in self.my_stopwords_HW]
+        words_SW = [word for word in words_unclean if word not in self.my_stopwords_SW]
 
         # sum the weights
         sample_weight = {'SC': 0.0, 'HW': 0.0, 'SW': 0.0}
 
         # use these to normalize the weights
-        # theyre isolated so we can ignore indecisive weighted_dict
-        # (weight ~= 0.5)
         norm_SC = 0.0
         norm_HW = 0.0
         norm_SW = 0.0
 
-        # loop through the words in the recall
-        for word in words:
+        # Security weightings
+        for word in words_SC:
 
             # look up the frequencies in the table
             freqs = weighted_dict.get(word)
 
-            # if the word isn't in the table, stay all zeros
+            # if the word is in the table
             if freqs is not None:
 
-                # TODO Explore more complex weight functions
-                # Currently just summing and normalizing the ratios
-                # - try doubling weights that are near 0 or 1
-                # - try ignoring weights (0.4, 0.6) as these words are ambiguous
+                # TODO: Not sure if referencing SW is helping
+                if(freqs['SW']):
+                    sample_weight['SC'] += float(freqs['SC']) / freqs['SW']
+                else:
+                    sample_weight['SC'] += float(freqs['SC']) / freqs['TOT']
+                norm_SC += 1
 
-                # calculate the ratio of words in each class to total word frequency
-                if(freqs['SC'] < 0.5 or 0.5 < freqs['SC']):
-                    if(freqs['SW']):
-                        sample_weight['SC'] += float(freqs['SC']) / freqs['SW']
-                    else:
-                        sample_weight['SC'] += float(freqs['SC']) / freqs['TOT']
-                    norm_SC += 1
-                if(freqs['HW'] < 0.5 or 0.5 < freqs['HW']):
-                    sample_weight['HW'] += float(freqs['HW']) / freqs['TOT']
-                    norm_HW += 1
-                if(freqs['HW'] < 0.5 or 0.5 < freqs['HW']):
-                    sample_weight['SW'] += float(freqs['SW']) / freqs['TOT']
-                    norm_SW += 1
+        # Hardware weightings
+        for word in words_HW:
+
+            # look up the frequencies in the table
+            freqs = weighted_dict.get(word)
+
+            # if the word is in the table
+            if freqs is not None:
+                sample_weight['HW'] += float(freqs['HW']) / freqs['TOT']
+                norm_HW += 1
+
+        # Software weightings
+        for word in words_SW:
+
+            # look up the frequencies in the table
+            freqs = weighted_dict.get(word)
+
+            # if the word is in the table
+            if freqs is not None:
+
+                sample_weight['SW'] += float(freqs['SW']) / freqs['TOT']
+                norm_SW += 1
                 
-        
         # normalize
         if(norm_SC):
             sample_weight['SC'] /= norm_SC
@@ -240,74 +261,20 @@ class WD():
             sample_weight['HW'] /= norm_HW
         if(norm_SW):
             sample_weight['SW'] /= norm_SW
+
+        # TODO: input to hyperbolic tangent
+
         
         return sample_weight
 
     # Find the top 100 weighted_dict for each class
-    def top_keyword_get(self):
+    def top_keyword_get(self, verbose=False):
         
-        # use tuples to represent each class:
-        # (SC, SW, HW)
-        SC_top = [  ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]]
-        HW_top = [  ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]]
-        SW_top = [  ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0],
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0], 
-                    ["", 0], ["", 0], ["", 0], ["", 0], ["", 0]]
+        # 100 blank tuples for the top
+        # ("word", freq)
+        SC_top = [ ("", 0) for _ in range(100)]
+        HW_top = [ ("", 0) for _ in range(100)]
+        SW_top = [ ("", 0) for _ in range(100)]
 
         lowest_freqs = {'SC' : (0, 8675309), 'HW' : (0, 8675309), 'SW' : (0, 8675309)}
 
@@ -331,28 +298,71 @@ class WD():
                 # the lowest frequency keyword for that class then
                 # replace the lowest with the current
                 if(self.weighted_dict[kw]['SC'] > lowest_freqs['SC'][1]):
-                    SC_top[lowest_freqs['SC'][0]][0] = kw
-                    SC_top[lowest_freqs['SC'][0]][1] = self.weighted_dict[kw]['SC']
+                    SC_top[lowest_freqs['SC'][0]] = (kw, self.weighted_dict[kw]['SC'])
                 if(self.weighted_dict[kw]['HW'] > lowest_freqs['HW'][1]):
-                    HW_top[lowest_freqs['HW'][0]][0] = kw
-                    HW_top[lowest_freqs['HW'][0]][1] = self.weighted_dict[kw]['HW']
+                    HW_top[lowest_freqs['HW'][0]] = (kw, self.weighted_dict[kw]['HW'])
                 if(self.weighted_dict[kw]['SW'] > lowest_freqs['SW'][1]):
-                    SW_top[lowest_freqs['SW'][0]][0] = kw
-                    SW_top[lowest_freqs['SW'][0]][1] = self.weighted_dict[kw]['SW']
+                    SW_top[lowest_freqs['SW'][0]] = (kw, self.weighted_dict[kw]['SW'])
         
-        #print('Security')
-        #print(SC_top)
-        #print('Hardware')
-        #print(HW_top)
-        #print('Software')
-        #print(SW_top)
-
-        # sort them before you return them
+        # sort them
         SC_top.sort(key = lambda x: x[1], reverse=True)
         HW_top.sort(key = lambda x: x[1], reverse=True)
         SW_top.sort(key = lambda x: x[1], reverse=True)
+
+        # print them to the console
+        if(verbose):
+            print('Security')
+            print(SC_top)
+            print('Hardware')
+            print(HW_top)
+            print('Software')
+            print(SW_top)
+
+        # return them
         return (SC_top, HW_top, SW_top)
     
+    # determine a list of all words 
+    # for each class that have between a 0.4 and 0.6 weight
+    def get_stop_words(self, min_weight=0.45, max_weight=0.55, verbose=False):
+
+        # Empty list for each class
+        SC_stopwords = []
+        HW_stopwords = []
+        SW_stopwords = []
+
+        # loop through kewords ignoring metadata
+        for kw in self.weighted_dict:
+            if(kw not in self.metadata_labels):
+
+                SC_weight = 0
+                HW_weight = 0
+                SW_weight = 0
+                
+                # Determine the weights
+                SC_weight = float(self.weighted_dict[kw]['SC']) / float(self.weighted_dict[kw]['TOT'])
+                HW_weight = float(self.weighted_dict[kw]['HW']) / float(self.weighted_dict[kw]['TOT'])
+                SW_weight = float(self.weighted_dict[kw]['SW']) / float(self.weighted_dict[kw]['TOT'])
+
+                # If they are between min and max add them to the stop words
+                if(min_weight < SC_weight and SC_weight < max_weight):
+                    SC_stopwords.append(kw)
+                if(min_weight < HW_weight and HW_weight < max_weight):
+                    HW_stopwords.append(kw)
+                if(min_weight < SW_weight and SW_weight < max_weight):
+                    SW_stopwords.append(kw)
+
+        # print them to the console
+        if(verbose):
+            print('Security(', len(SC_stopwords), ')')
+            print(SC_stopwords)
+            print('Hardware(', len(HW_stopwords), ')')
+            print(HW_stopwords)
+            print('Software(', len(SW_stopwords), ')')
+            print(SW_stopwords)
+
+        # return them
+        return (SC_stopwords, HW_stopwords, SW_stopwords)
+
     # classify using the weighted dictionary approach
     def clf_WD(self, sentance):
 
@@ -379,7 +389,7 @@ class WD():
         return classifications
 
     # test the performance of the model based on the labeled samples
-    def test(self, data_labeled, fold_count=10):
+    def test(self, data_labeled, fold_count=8):
 
         sample_per_fold = int(data_labeled.shape[0] / fold_count)
 
@@ -562,5 +572,4 @@ class WD():
 
 
         return SC_SW_overlap
-
 

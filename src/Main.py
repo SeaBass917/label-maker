@@ -128,10 +128,50 @@ def print_stats(data_labeled):
         "Total:    ", N_TOT,   "\n"
     )
 
+# Find and display top keywords fopr the weights in local storage
+def show_top_keywords():
+
+    # init weighted dict
+    w = WD()
+
+    # load the weights
+    w.load_weights()
+
+    # Find and display top keywords
+    print('\t --- Top 100 Keywords ---')
+    w.top_keyword_get(verbose=True)
+    print("\n\n")
+
+    # find and dislay stopwords
+    print("\t --- Stop words ---")
+    w.get_stop_words(verbose=True)
+    print("\n\n")
+
+# Run cross validation on the labeled dataset using the WD model
+# TODO: Compare the Grep approach at the end
+def test_performance():
+
+    # init weighted dict
+    w = WD()
+    w.load_weights()
+    
+    # load the recall data
+    data_labeled = pd.read_csv('../data/recall_labeled.csv')
+
+    # run X val
+    accuracies = w.test(data_labeled)
+
+    accuracies.to_csv('../data/8-fold_X-Val.csv')
+
 def main():
 
     #measure_stability()
 
+    #show_top_keywords()
+
+    test_performance()
+
+    #Labeler().run()
 
     #data_labeled = pd.read_csv('../data/recall_labeled.csv')
     #data_ss_labeled = pd.read_csv('../data/data-ss-labeled_800.csv')
@@ -141,9 +181,5 @@ def main():
 
     #print("--- Model Labels ---")
     #print_stats(data_ss_labeled)
-
-    l = Labeler()
-    l.run()
-
 
 main()
