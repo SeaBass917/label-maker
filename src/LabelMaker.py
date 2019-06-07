@@ -142,7 +142,7 @@ class Labeler():
         self.save_data()
 
         # update the weights based on the new label
-        self.weighted_dict.weight_update(self.sentance, y_SC=self.var_sc.get(), y_HW=self.var_hw.get(), y_SW=self.var_sw.get())
+        self.weighted_dict.update_model(self.sentance, y_SC=self.var_sc.get(), y_HW=self.var_hw.get(), y_SW=self.var_sw.get())
 
         # get next sample
         if(self.isUncertain.get()):

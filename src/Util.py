@@ -18,6 +18,10 @@ from nltk.stem import WordNetLemmatizer
 import pandas as pd
 import numpy as np
 
+# sigmoid for the weighting
+def sigmoid(x, alpha=15):
+    return 1 / (1 + np.exp(alpha*(0.5-x)))
+
 # used to convert sentance to list of words
 # this removes stop words, punctuation, and numbers
 def tokenize(sentance):

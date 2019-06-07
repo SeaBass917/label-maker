@@ -14,7 +14,7 @@ import numpy as np
 
 # quantitatively analyze how much the models predictions are changing 
 # as more data is used to label the samples
-def measure_stability(reupsample=False):
+def measure_stability(reupsample=False, online_weight_adjust=True):
 
     # init weighted dict
     w = WD()
@@ -38,19 +38,24 @@ def measure_stability(reupsample=False):
     for sample_count in sample_counts:
 
         print(sample_count, "...")
+
+        if(online_weight_adjust):
+            addr_data = '../data/data-ss-labeled_'+str(sample_count)+'(ON).csv'
+        else:
+            addr_data = '../data/data-ss-labeled_'+str(sample_count)+'(OFF).csv'
         
         # set the current as the previous
         data_ss_labeled_prev = data_ss_labeled_curr
 
         # get the semi-supervised labeled data
         if(reupsample):
-            data_ss_labeled_curr = w.upsample(data_labeled, data_unlabeled, sample_count)
+            data_ss_labeled_curr = w.upsample(data_labeled, data_unlabeled, sample_count, addr_newlabels=addr_data, online_weight_adjust=online_weight_adjust)
         else:
             # try to read if the data is there, if its not regenerate it
             try:
-                data_ss_labeled_curr = pd.read_csv('../data/data-ss-labeled_'+str(sample_count)+'.csv')
+                data_ss_labeled_curr = pd.read_csv(addr_data)
             except:
-                data_ss_labeled_curr = w.upsample(data_labeled, data_unlabeled, sample_count)
+                data_ss_labeled_curr = w.upsample(data_labeled, data_unlabeled, sample_count, addr_newlabels=addr_data, online_weight_adjust=online_weight_adjust)
             
         total_same_SC = 0
         total_same_HW = 0
@@ -149,27 +154,37 @@ def show_top_keywords():
 
 # Run cross validation on the labeled dataset using the WD model
 # TODO: Compare the Grep approach at the end
-def test_performance():
+def test_performance(alpha=0, fold_count=8, addr_out='../data/test_out.csv'):
 
     # init weighted dict
-    w = WD()
+    w = WD(alpha=alpha)
     w.load_weights()
     
     # load the recall data
     data_labeled = pd.read_csv('../data/recall_labeled.csv')
 
     # run X val
-    accuracies = w.test(data_labeled)
+    accuracies = w.test(data_labeled, fold_count)
 
-    accuracies.to_csv('../data/8-fold_X-Val.csv')
+    # write results to local CSV
+    accuracies.to_csv(addr_out)
+
+def sweep_alphas(alpha_min, alpha_max, alpha_delta, fold_count=8):
+
+    for alpha in range(alpha_min, alpha_max, alpha_delta):
+
+        print('\t --- Alpha:', alpha)
+        test_performance(alpha=alpha, addr_out='../data/'+str(fold_count)+'-fold_X-val_alpha-'+str(alpha)+'.csv')
 
 def main():
 
-    #measure_stability()
+    measure_stability(reupsample=True, online_weight_adjust=True)
 
     #show_top_keywords()
 
-    test_performance()
+    #test_performance(alpha=40)
+
+    #sweep_alphas(5, 40, 5)
 
     #Labeler().run()
 
