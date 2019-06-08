@@ -178,7 +178,10 @@ def sweep_alphas(alpha_min, alpha_max, alpha_delta, fold_count=8):
 
 def main():
 
-    measure_stability(reupsample=True, online_weight_adjust=True)
+    # TODO: FIX STABILITY PLOT
+
+    #measure_stability(reupsample=True, online_weight_adjust=True)
+    #measure_stability(reupsample=True, online_weight_adjust=False)
 
     #show_top_keywords()
 
@@ -186,7 +189,8 @@ def main():
 
     #sweep_alphas(5, 40, 5)
 
-    #Labeler().run()
+    
+    Labeler().run()
 
     #data_labeled = pd.read_csv('../data/recall_labeled.csv')
     #data_ss_labeled = pd.read_csv('../data/data-ss-labeled_800.csv')
