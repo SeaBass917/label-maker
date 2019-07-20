@@ -204,7 +204,7 @@ class WD():
         self.weighted_dict = self.update_dict(self.weighted_dict, sentance, y_SC, y_HW, y_SW)
 
         # save the weights
-        self.weighted_dict.save_weights()
+        self.save_weights()
 
     # calculate the full weight for a list of words
     # this weight is almost a prediction of sorts
