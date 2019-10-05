@@ -14,7 +14,7 @@ import numpy as np
 
 # quantitatively analyze how much the models predictions are changing 
 # as more data is used to label the samples
-def measure_stability(reupsample=False, online_weight_adjust=True, online_confidence_constant=0.25):
+def measure_stability(reupsample=False, ratio_noncomp_samples=0.5):
 
     # init weighted dict
     w = WD()
@@ -24,13 +24,25 @@ def measure_stability(reupsample=False, online_weight_adjust=True, online_confid
     data_labeled = pd.read_csv('../data/recall_labeled.csv')
     data_unlabeled = pd.read_csv('../data/recall_unlabeled.csv')
 
+    # Filter the data betwen computer and non-computer related issues
+    data_labeled_comp = pd.DataFrame()
+    data_labeled_noncomp = pd.DataFrame()
+    for i, data in data_labeled.iterrows():
+        if(data['SC'] == 1 or data['HW'] == 1 or data['SW'] == 1):
+            data_labeled_comp = data_labeled_comp.append(data)
+        else:
+            data_labeled_noncomp = data_labeled_noncomp.append(data)
+
+    print(data_labeled_comp.shape[0], 'computer related samples')
+    print(data_labeled_noncomp.shape[0], 'non-computer related samples')
+
     # keep track of current and previous dataframes
     data_ss_labeled_prev = None
     data_ss_labeled_curr = pd.DataFrame() 
 
     # every round add a hundred samples, but the first few should be smaller incremenets
     # this array represents that
-    sample_counts = np.arange(100, data_labeled.shape[0]+1, 100)
+    sample_counts = np.arange(50, data_labeled_comp.shape[0]+1, 50)
 
     # initialize frame to store stability info
     stability = pd.DataFrame(index=['SC', 'HW', 'SW'], columns=sample_counts)
@@ -39,23 +51,20 @@ def measure_stability(reupsample=False, online_weight_adjust=True, online_confid
 
         print(sample_count, "...")
 
-        if(online_weight_adjust):
-            addr_data = '../data/data-ss-labeled_'+str(sample_count)+'(ON-'+str(online_confidence_constant)+').csv'
-        else:
-            addr_data = '../data/data-ss-labeled_'+str(sample_count)+'(OFF).csv'
+        addr_data = '../data/data-ss-labeled_'+str(sample_count)+'('+str(ratio_noncomp_samples)+').csv'
         
         # set the current as the previous
         data_ss_labeled_prev = data_ss_labeled_curr.copy()
 
         # get the semi-supervised labeled data
         if(reupsample):
-            data_ss_labeled_curr = w.upsample(data_labeled, data_unlabeled, sample_count, addr_newlabels=addr_data, online_weight_adjust=online_weight_adjust, online_confidence_constant=online_confidence_constant)
+            data_ss_labeled_curr = w.upsample(data_labeled_comp, data_labeled_noncomp, data_unlabeled, sample_count, addr_newlabels=addr_data, ratio_noncomp_samples=ratio_noncomp_samples)
         else:
             # try to read if the data is there, if its not regenerate it
             try:
                 data_ss_labeled_curr = pd.read_csv(addr_data)
             except:
-                data_ss_labeled_curr = w.upsample(data_labeled, data_unlabeled, sample_count, addr_newlabels=addr_data, online_weight_adjust=online_weight_adjust, online_confidence_constant=online_confidence_constant)
+                data_ss_labeled_curr = w.upsample(data_labeled_comp, data_labeled_noncomp, data_unlabeled, sample_count, addr_newlabels=addr_data, ratio_noncomp_samples=ratio_noncomp_samples)
             
         total_same_SC = 0
         total_same_HW = 0
@@ -93,10 +102,7 @@ def measure_stability(reupsample=False, online_weight_adjust=True, online_confid
             stability.loc['SW', sample_count] = -3.1415926
 
     # store the resultant info locally
-    if online_weight_adjust:
-        fileNameOut = '../data/stability(ON-'+str(online_confidence_constant)+').csv'
-    else:
-        fileNameOut = '../data/stability(OFF).csv'
+    fileNameOut = '../data/stability('+str(ratio_noncomp_samples)+').csv'
     
     stability.to_csv(fileNameOut)
 
@@ -169,8 +175,7 @@ def show_top_keywords():
     print("\n\n")
 
 # Run cross validation on the labeled dataset using the WD model
-# TODO: Compare the Grep approach at the end
-def test_performance(alpha=0, fold_count=8, addr_out='../data/test_out.csv'):
+def test_performance(alpha=0, fold_count=8, sample_count=-1, ratio_noncomp_samples=0.5, addr_out='../data/test_out.csv'):
 
     # init weighted dict
     w = WD(alpha=alpha)
@@ -179,11 +184,40 @@ def test_performance(alpha=0, fold_count=8, addr_out='../data/test_out.csv'):
     # load the recall data
     data_labeled = pd.read_csv('../data/recall_labeled.csv')
 
+    # Filter the data betwen computer and non-computer related issues
+    data_labeled_comp = pd.DataFrame()
+    data_labeled_noncomp = pd.DataFrame()
+    for i, data in data_labeled.iterrows():
+        if(data['SC'] == 1 or data['HW'] == 1 or data['SW'] == 1):
+            data_labeled_comp = data_labeled_comp.append(data)
+        else:
+            data_labeled_noncomp = data_labeled_noncomp.append(data)
+
+    print(data_labeled_comp.shape[0], 'computer related samples')
+    print(data_labeled_noncomp.shape[0], 'non-computer related samples')
+
+    # determine how many non computer related samples to include
+    sample_count_noncomp = min(int(sample_count * ratio_noncomp_samples), data_labeled_noncomp.shape[0])
+
+    if(sample_count_noncomp == data_labeled_noncomp.shape[0]):
+        print('\tWarning! Not enough non computer related samples to fill the ratio.')
+
+    # sample the fixed number of samples from the labeled datasets at random
+    data_labeled_subset = data_labeled_comp.sample(n=sample_count, random_state=42).append(
+        data_labeled_noncomp.sample(n=sample_count_noncomp, random_state=42)
+    )
+
     # run X val
-    accuracies = w.test(data_labeled, fold_count)
+    accuracies = w.test(data_labeled_subset, fold_count)
 
     # write results to local CSV
     accuracies.to_csv(addr_out)
+
+# TODO: Compare the Grep approach at the end
+def sweep_performance(ratio_noncomp_samples=0.5):
+    for sample_count in range(50, 551, 50):
+        test_performance(alpha=0, fold_count=8, sample_count=sample_count, ratio_noncomp_samples=ratio_noncomp_samples, 
+                         addr_out='../data/performance_sweeps/test_'+str(sample_count)+'('+str(ratio_noncomp_samples)+').csv')
 
 def sweep_alphas(alpha_min, alpha_max, alpha_delta, fold_count=8):
 
@@ -205,20 +239,20 @@ def sweep_confidence_online_weight_adjust(alpha_min, alpha_max, alpha_delta):
 
 def main():
 
-    #measure_stability(reupsample=True, online_weight_adjust=True)
-    #measure_stability(reupsample=True, online_weight_adjust=False)
+    #measure_stability(reupsample=True, ratio_noncomp_samples=0.0)
+    #measure_stability(reupsample=True, ratio_noncomp_samples=1.0)
 
     #sweep_confidence_online_weight_adjust(0.0, 0.15, 0.05)
 
     #show_top_keywords()
 
-    #test_performance(alpha=40)
+    #sweep_performance(ratio_noncomp_samples=0.5)
 
     #sweep_alphas(5, 40, 5)
 
-    Labeler(    addr_labeled_data='/home/sebastian/Documents/Ditzler-Rozenblit/Medical Device Recall Classification/label-maker/data/recall_labeled.csv', 
-                addr_unlabeled_data='/home/sebastian/Documents/Ditzler-Rozenblit/Medical Device Recall Classification/label-maker/data/recall_unlabeled.csv', 
-                addr_weights='/home/sebastian/Documents/Ditzler-Rozenblit/Medical Device Recall Classification/label-maker/data/weighted-dictionary.pk1'
+    Labeler(    addr_labeled_data='C:/Users/sthie/Documents/label-maker/data/recall_labeled.csv', 
+                addr_unlabeled_data='C:/Users/sthie/Documents/label-maker/data/recall_unlabeled.csv', 
+                addr_weights='C:/Users/sthie/Documents/label-maker/data/weighted-dictionary.pk1'
     ).run()
 
     #data_labeled = pd.read_csv('../data/recall_labeled.csv')
