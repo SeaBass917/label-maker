@@ -228,75 +228,81 @@ class Labeler():
     def run(self):
         
         ## initialize a gui for this
+        
+        # Greys   ["#ffffff","#f2f2f2","#e2e2e2","#cecece","#b4b4b4","#979797","#7a7a7a","#5f5f5f","#404040","#1e1e1e","#000000"]
+        # Purples ["#f2f0f7","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#4a1486"]
+        # Oranges ["#feedde","#fdd0a2","#fdae6b","#fd8d3c","#f16913","#d94801","#8c2d04"]
+        # Greens  ["#edf8e9","#c7e9c0","#a1d99b","#74c476","#41ab5d","#238b45","#005a32"]
+        # Blues   ["#eff3ff","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5","#084594"]
 
         # main window
         main_window = tk.Tk()
-        main_window.title('Label Maker v3.45')
-        main_window.configure(bg='#404040', padx=3, pady=3)
+        main_window.title('Label Maker v4.0')
+        main_window.configure(bg='#252525', padx=3, pady=3)
+        
+        # let the user decide what class we want to focus on
+        self.isUncertain = tk.IntVar()
+        tk.Checkbutton(main_window, bg='#252525', fg='#ffffff', highlightthickness=0, selectcolor="#404040", text='Find Uncertain', variable=self.isUncertain).grid(row=1, rowspan=2, column=2)
+        self.search_label = tk.StringVar()
+        self.search_label.set('SC')
+        drop_down = tk.OptionMenu(main_window, self.search_label, *{'SC', 'HW', 'SW'})
+        drop_down.configure(height=1, bg='#252525', fg='#ffffff', highlightthickness=0)
+        drop_down['menu'].configure(bg='#252525', fg='#ffffff')
+        drop_down.grid(row=1, rowspan=2, column=3, padx=1)
         
         # label to say the current sample number (like an id)
-        self.sample_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
-        self.sample_label.grid(row=0, column=0, sticky=tk.W, padx=3, pady=3)
+        self.sample_label = tk.Label(main_window, bg='#252525', fg='#ffffff')
+        self.sample_label.grid(row=1, column=0, sticky=tk.W, padx=3, pady=3)
 
         # Idsplay number of abeled samples, and specify each classes frequency
-        self.sample_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff')
-        self.SC_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff', width=13)
-        self.HW_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff', width=13)
-        self.SW_count_label = tk.Label(main_window, bg='#404040', fg='#ffffff', width=13)
-        self.sample_count_label.grid(row=1, column=0, sticky=tk.W)
-        self.SC_count_label.grid(row=2, column=0, sticky=tk.W, padx=3, pady=3)
-        self.HW_count_label.grid(row=3, column=0, sticky=tk.W, padx=3, pady=3)
-        self.SW_count_label.grid(row=4, column=0, sticky=tk.W, padx=3, pady=3)
+        self.sample_count_label = tk.Label(main_window, bg='#252525', fg='#ffffff')
+        self.SC_count_label = tk.Label(main_window, bg='#6a51a3', fg='#ffffff', width=13)
+        self.HW_count_label = tk.Label(main_window, bg='#d94801', fg='#ffffff', width=13)
+        self.SW_count_label = tk.Label(main_window, bg='#238b45', fg='#ffffff', width=13)
+        self.sample_count_label.grid(row=2, column=0, sticky=tk.W, padx=3, pady=3)
+        self.SC_count_label.grid(row=3, column=0, sticky=tk.W, padx=3, pady=3)
+        self.HW_count_label.grid(row=4, column=0, sticky=tk.W, padx=3, pady=3)
+        self.SW_count_label.grid(row=5, column=0, sticky=tk.W, padx=3, pady=3)
         
         # display a real time performance calc
-        self.SC_perf = tk.Label(main_window, text="<>", bg='#404040', fg='#ffffff', width=7)
-        self.HW_perf = tk.Label(main_window, text="<>", bg='#404040', fg='#ffffff', width=7)
-        self.SW_perf = tk.Label(main_window, text="<>", bg='#404040', fg='#ffffff', width=7)
-        self.SC_perf.grid(row=2, column=1, sticky=tk.W, pady=3)
-        self.HW_perf.grid(row=3, column=1, sticky=tk.W, pady=3)
-        self.SW_perf.grid(row=4, column=1, sticky=tk.W, pady=3)
+        self.SC_perf = tk.Label(main_window, text="--", bg='#6a51a3', fg='#ffffff', width=7)
+        self.HW_perf = tk.Label(main_window, text="--", bg='#d94801', fg='#ffffff', width=7)
+        self.SW_perf = tk.Label(main_window, text="--", bg='#238b45', fg='#ffffff', width=7)
+        self.SC_perf.grid(row=3, column=1, sticky=tk.W, padx=3, pady=3)
+        self.HW_perf.grid(row=4, column=1, sticky=tk.W, padx=3, pady=3)
+        self.SW_perf.grid(row=5, column=1, sticky=tk.W, padx=3, pady=3)
 
         # check boxes for voting
         self.var_sc = tk.IntVar()
         self.var_hw = tk.IntVar()
         self.var_sw = tk.IntVar()
-        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Security', variable=self.var_sc).grid(row=2, column=2, sticky=tk.W, pady=3)
-        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Hardware', variable=self.var_hw).grid(row=3, column=2, sticky=tk.W, pady=3)
-        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Software', variable=self.var_sw).grid(row=4, column=2, sticky=tk.W, pady=3)
+        tk.Checkbutton(main_window, bg='#6a51a3', fg='#ffffff', highlightthickness=0, selectcolor="#4a1486", text='Security', variable=self.var_sc).grid(row=3, column=2, sticky=tk.W, padx=3, pady=3)
+        tk.Checkbutton(main_window, bg='#d94801', fg='#ffffff', highlightthickness=0, selectcolor="#8c2d04", text='Hardware', variable=self.var_hw).grid(row=4, column=2, sticky=tk.W, padx=3, pady=3)
+        tk.Checkbutton(main_window, bg='#238b45', fg='#ffffff', highlightthickness=0, selectcolor="#005a32", text='Software', variable=self.var_sw).grid(row=5, column=2, sticky=tk.W, padx=3, pady=3)
 
         # labels for the checkboxes
-        self.SC_label = tk.Label(main_window, bg='#404040', fg='#ffffff', width=7)
-        self.HW_label = tk.Label(main_window, bg='#404040', fg='#ffffff', width=7)
-        self.SW_label = tk.Label(main_window, bg='#404040', fg='#ffffff', width=7)
-        self.SC_label.grid(row=2, column=3, sticky=tk.W, pady=3)
-        self.HW_label.grid(row=3, column=3, sticky=tk.W, pady=3)
-        self.SW_label.grid(row=4, column=3, sticky=tk.W, pady=3)
-
-        # skip button
-        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Skip -->', width=15, bd=3, command=self.next).grid(row=5, column=2, columnspan=2, sticky=tk.W, pady=3)
+        self.SC_label = tk.Label(main_window, bg='#6a51a3', fg='#ffffff', highlightthickness=0, width=7)
+        self.HW_label = tk.Label(main_window, bg='#d94801', fg='#ffffff', highlightthickness=0, width=7)
+        self.SW_label = tk.Label(main_window, bg='#238b45', fg='#ffffff', highlightthickness=0, width=7)
+        self.SC_label.grid(row=3, column=3, sticky=tk.W, padx=3, pady=3)
+        self.HW_label.grid(row=4, column=3, sticky=tk.W, padx=3, pady=3)
+        self.SW_label.grid(row=5, column=3, sticky=tk.W, padx=3, pady=3)
 
         # this is where the text will be pasted
-        self.text_box = tk.Text(main_window, bg='#202020', fg='#ffffff', height=7, width=70)
-        self.text_box.grid(row=6, columnspan=4, padx=3, pady=3)
+        self.text_box = tk.Text(main_window, bg='#1e1e1e', fg='#ffffff', height=7, width=70)
+        self.text_box.grid(row=7, columnspan=4, padx=3, pady=3)
 
-        # let the user decide what class we want to focus on
-        self.isUncertain = tk.IntVar()
-        tk.Checkbutton(main_window, bg='#404040', fg='#ffffff', selectcolor="#202020", text='Find Uncertain', variable=self.isUncertain).grid(row=7, column=0, padx=3, pady=3)
-        self.search_label = tk.StringVar()
-        self.search_label.set('SC')
-        drop_down = tk.OptionMenu(main_window, self.search_label, *{'SC', 'HW', 'SW'})
-        drop_down.configure(bg='#404040', fg='#ffffff')
-        drop_down['menu'].configure(bg='#404040', fg='#ffffff')
-        drop_down.grid(row=7, column=1, padx=3, pady=3)
-        
+        # skip button
+        tk.Button(main_window, bg='#404040', fg='#ffffff', highlightthickness=0, text='Skip -->', width=15, bd=3, command=self.next).grid(row=8, column=3, padx=3, pady=3)
+
         # submit the label and get the next sample
-        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Submit', height=3, width=15, bd=3, command=self.submit).grid(row=7, rowspan=2, column=3, padx=3, pady=3)
+        tk.Button(main_window, bg='#404040', fg='#ffffff', highlightthickness=0, text='Submit', height=2, width=15, bd=3, command=self.submit).grid(row=9, column=3, padx=3, pady=3)
 
         # Allow user to search for weighted_dict in unlabeled samples
         self.search_key = tk.StringVar()
         self.search_key.set("Battery...Software...")
-        tk.Entry(main_window, textvariable=self.search_key, bg='#202020', fg='#ffffff', width=15).grid(row=8, column=0, padx=3, pady=3)
-        tk.Button(main_window, bg='#404040', fg='#ffffff', text='Search', width=15, command=self.search_keyword, bd=3).grid(row=8, column=1, padx=3, pady=3)
+        tk.Entry(main_window, textvariable=self.search_key, bg='#000000', fg='#ffffff', highlightthickness=0, width=15).grid(row=9, column=0, padx=3, pady=3)
+        tk.Button(main_window, bg='#404040', fg='#ffffff', highlightthickness=0, text='Keyword Search', width=15, command=self.search_keyword, bd=3).grid(row=9, column=1, padx=3, pady=3)
 
         # call now to load the next(first) sample
         self.next()

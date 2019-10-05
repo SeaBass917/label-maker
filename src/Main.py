@@ -206,9 +206,9 @@ def sweep_confidence_online_weight_adjust(alpha_min, alpha_max, alpha_delta):
 def main():
 
     #measure_stability(reupsample=True, online_weight_adjust=True)
-    measure_stability(reupsample=True, online_weight_adjust=False)
+    # measure_stability(reupsample=True, online_weight_adjust=False)
 
-    sweep_confidence_online_weight_adjust(0.0, 0.15, 0.05)
+    # sweep_confidence_online_weight_adjust(0.0, 0.15, 0.05)
 
     #show_top_keywords()
 
@@ -217,7 +217,9 @@ def main():
     #sweep_alphas(5, 40, 5)
 
     
-    #Labeler().run()
+    Labeler(    addr_labeled_data='/home/sebastian/Documents/Ditzler-Rozenblit/Medical Device Recall Classification/label-maker/data/recall_labeled.csv', 
+                addr_unlabeled_data='/home/sebastian/Documents/Ditzler-Rozenblit/Medical Device Recall Classification/label-maker/data/recall_unlabeled.csv', 
+                addr_weights='/home/sebastian/Documents/Ditzler-Rozenblit/Medical Device Recall Classification/label-maker/data/weighted-dictionary.pk1').run()
 
     #data_labeled = pd.read_csv('../data/recall_labeled.csv')
     #data_ss_labeled = pd.read_csv('../data/data-ss-labeled_800.csv')
