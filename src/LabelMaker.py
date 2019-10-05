@@ -77,7 +77,7 @@ class Labeler():
             i = int(np.random.uniform(0, self.data_unlabeled.shape[0]))
                 
             # get sample -> calculate weight
-            sample_label = self.weighted_dict.weight_sentance(self.data_unlabeled.loc[i,'MANUFACTURER_RECALL_REASON'], self.weighted_dict)
+            sample_label = self.weighted_dict.weight_sentance(self.data_unlabeled.iloc[i].loc['MANUFACTURER_RECALL_REASON'], self.weighted_dict)
 
             # update weight max
             weight_diff = abs(weight - sample_label[self.search_label.get()])
