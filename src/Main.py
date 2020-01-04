@@ -8,6 +8,7 @@
 # ------------------------------------------------------------
 from WeightedDictionaryClf import WD
 from LabelMaker import Labeler
+from Util import tokenize
 
 import pandas as pd
 import numpy as np
@@ -15,14 +16,14 @@ import numpy as np
 # quantitatively analyze how much the models predictions are changing 
 # as more data is used to label the samples
 def measure_stability(reupsample=False, ratio_noncomp_samples=0.5):
-
+    
     # init weighted dict
     w = WD()
     w.load_weights()
     
     # load the recall data
-    data_labeled = pd.read_csv('../data/recall_labeled.csv')
-    data_unlabeled = pd.read_csv('../data/recall_unlabeled.csv')
+    data_labeled = pd.read_csv('data/recall_labeled.csv')
+    data_unlabeled = pd.read_csv('data/recall_unlabeled.csv')
 
     # Filter the data betwen computer and non-computer related issues
     data_labeled_comp = pd.DataFrame()
@@ -51,7 +52,7 @@ def measure_stability(reupsample=False, ratio_noncomp_samples=0.5):
 
         print(sample_count, "...")
 
-        addr_data = '../data/data-ss-labeled_'+str(sample_count)+'('+str(ratio_noncomp_samples)+').csv'
+        addr_data = 'data/data-ss-labeled_'+str(sample_count)+'('+str(ratio_noncomp_samples)+').csv'
         
         # set the current as the previous
         data_ss_labeled_prev = data_ss_labeled_curr.copy()
@@ -102,7 +103,7 @@ def measure_stability(reupsample=False, ratio_noncomp_samples=0.5):
             stability.loc['SW', sample_count] = -3.1415926
 
     # store the resultant info locally
-    fileNameOut = '../data/stability('+str(ratio_noncomp_samples)+').csv'
+    fileNameOut = 'data/stability('+str(ratio_noncomp_samples)+').csv'
     
     stability.to_csv(fileNameOut)
 
@@ -175,14 +176,14 @@ def show_top_keywords():
     print("\n\n")
 
 # Run cross validation on the labeled dataset using the WD model
-def test_performance(alpha=0, fold_count=8, sample_count=-1, ratio_noncomp_samples=0.5, addr_out='../data/test_out.csv'):
+def test_performance(alpha=0, fold_count=8, sample_count=-1, ratio_noncomp_samples=0.5, addr_out='data/test_out.csv'):
 
     # init weighted dict
     w = WD(alpha=alpha)
     w.load_weights()
     
     # load the recall data
-    data_labeled = pd.read_csv('../data/recall_labeled.csv')
+    data_labeled = pd.read_csv('data/recall_labeled.csv')
 
     # Filter the data betwen computer and non-computer related issues
     data_labeled_comp = pd.DataFrame()
@@ -217,7 +218,7 @@ def test_performance(alpha=0, fold_count=8, sample_count=-1, ratio_noncomp_sampl
 def sweep_performance(ratio_noncomp_samples=0.5):
     for sample_count in range(50, 551, 50):
         test_performance(alpha=0, fold_count=8, sample_count=sample_count, ratio_noncomp_samples=ratio_noncomp_samples, 
-                         addr_out='../data/performance_sweeps/test_'+str(sample_count)+'('+str(ratio_noncomp_samples)+').csv')
+                         addr_out='data/performance_sweeps/test_'+str(sample_count)+'('+str(ratio_noncomp_samples)+').csv')
 
 def sweep_alphas(alpha_min, alpha_max, alpha_delta, fold_count=8):
 
@@ -226,7 +227,7 @@ def sweep_alphas(alpha_min, alpha_max, alpha_delta, fold_count=8):
     for alpha in range(alpha_min, alpha_max, alpha_delta):
 
         print('\t --- Alpha:', alpha)
-        test_performance(alpha=alpha, addr_out='../data/'+str(fold_count)+'-fold_X-val_alpha-'+str(alpha)+'.csv')
+        test_performance(alpha=alpha, addr_out='data/'+str(fold_count)+'-fold_X-val_alpha-'+str(alpha)+'.csv')
 
 def sweep_confidence_online_weight_adjust(alpha_min, alpha_max, alpha_delta):
 
@@ -237,7 +238,201 @@ def sweep_confidence_online_weight_adjust(alpha_min, alpha_max, alpha_delta):
         measure_stability(reupsample=True, online_weight_adjust=True, online_confidence_constant=alpha)
         alpha += alpha_delta
 
+def classify_samples(data_unlabeled_addr='data/recall_unlabeled.csv'):
+    
+    model = WD()
+    model.load_weights()
+
+    data_unlabeled = pd.read_csv(data_unlabeled_addr)
+
+    for i, row in data_unlabeled.iterrows():
+        
+        sentance = row.loc['MANUFACTURER_RECALL_REASON']
+
+        label = model.clf_WD(sentance)
+
+        data_unlabeled['SC'][i] = label['SC']
+        data_unlabeled['HW'][i] = label['HW']
+        data_unlabeled['SW'][i] = label['SW']
+
+    data_unlabeled.to_csv('data/recall_labeled_from_model.csv')
+
+def term_freq_analysis(data_labeled_from_model_addr='data/recall_labeled_from_model.csv',
+                        data_labeled_addr='data/recall_labeled.csv'):
+
+    # read both the samples labeled
+    df_man = pd.read_csv(data_labeled_addr)
+    df_auto = pd.read_csv(data_labeled_from_model_addr)
+
+    # combine them
+    data = pd.concat([df_man, df_auto], ignore_index=True)
+
+    # determine number of years
+    # it should be 17, from 2002 to 2018
+    years = data['YEAR']
+    years = years.drop_duplicates()
+    numYears = years.shape[0]
+
+    # seperate hist for each class
+    # determing most popular words for each year
+    # store in dict with year key
+    hist_by_year_sc = {}
+    hist_by_year_sw = {}
+    hist_by_year_hw = {}
+    for year in years:
+        hist_by_year_sc[year] = {}
+        hist_by_year_sw[year] = {}
+        hist_by_year_hw[year] = {}
+
+    # go through each sample
+    # update hist by year and class
+    for i, row in data.iterrows():
+
+        # read the row
+        year = row['YEAR']
+        sentance = row['MANUFACTURER_RECALL_REASON']
+        label_SC = row['SC']
+        label_SW = row['SW']
+        label_HW = row['HW']
+
+        words = tokenize(sentance)
+
+        # for each class update the hist
+        if label_SC == 1:
+            hist = hist_by_year_sc[year]
+            
+            for word in words:
+                if word in hist.keys():
+                    hist[word] += 1
+                else:
+                    hist[word] = 1
+
+            hist_by_year_sc[year] = hist
+            
+        if label_SW == 1:
+            hist = hist_by_year_sw[year]
+            
+            for word in words:
+                if word in hist.keys():
+                    hist[word] += 1
+                else:
+                    hist[word] = 1
+
+            hist_by_year_sw[year] = hist
+            
+        if label_HW == 1:
+            hist = hist_by_year_hw[year]
+            
+            for word in words:
+                if word in hist.keys():
+                    hist[word] += 1
+                else:
+                    hist[word] = 1
+
+            hist_by_year_hw[year] = hist
+            
+
+    # dataframes to be filled for each class and output of this function
+    df_sc = pd.DataFrame({
+        'words': [0 for year in years]
+    }, index=years)
+
+    df_sw = pd.DataFrame({
+        'words': [0 for year in years]
+    }, index=years)
+
+    df_hw = pd.DataFrame({
+        'words': [0 for year in years]
+    }, index=years)
+
+    # for each year determine top 10 keywords
+    top_keywords_by_year_sc = {}
+    top_keywords_by_year_sw = {}
+    top_keywords_by_year_hw = {}
+    for year in years:
+        
+        # initialize the top 10
+        top_keywords_sc = [('', 0) for i in range(10)]
+        top_keywords_sw = [('', 0) for i in range(10)]
+        top_keywords_hw = [('', 0) for i in range(10)]
+
+        # grab the histograms
+        hist_sc = hist_by_year_sc[year]
+        hist_sw = hist_by_year_sw[year]
+        hist_hw = hist_by_year_hw[year]
+
+        # Sort SC #
+        for word in hist_sc:
+            count = hist_sc[word]
+
+            # compare the current word to the words on the list
+            for i, (keyword, keycount) in enumerate(top_keywords_sc):
+                
+                # if the count is greater, then push all the other words back 
+                # store this one
+                # then break
+                if count >= keycount:
+                    for j in range(9, i, -1):
+                        top_keywords_sc[j] = top_keywords_sc[j-1]
+                    
+                    top_keywords_sc[i] = (word, count)
+
+                    break
+
+        # Sort SW #
+        for word in hist_sw:
+            count = hist_sw[word]
+
+            # compare the current word to the words on the list
+            for i, (keyword, keycount) in enumerate(top_keywords_sw):
+                
+                # if the count is greater, then push all the other words back 
+                # store this one
+                # then break
+                if count >= keycount:
+                    for j in range(9, i, -1):
+                        top_keywords_sw[j] = top_keywords_sw[j-1]
+                    
+                    top_keywords_sw[i] = (word, count)
+
+                    break
+
+        # Sort HW #
+        for word in hist_hw:
+            count = hist_hw[word]
+
+            # compare the current word to the words on the list
+            for i, (keyword, keycount) in enumerate(top_keywords_hw):
+                
+                # if the count is greater, then push all the other words back 
+                # store this one
+                # then break
+                if count >= keycount:
+                    for j in range(9, i, -1):
+                        top_keywords_hw[j] = top_keywords_hw[j-1]
+                    
+                    top_keywords_hw[i] = (word, count)
+
+                    break
+
+        # store in datastructure for this year
+        top_keywords_by_year_sc[year] = top_keywords_sc
+        top_keywords_by_year_sw[year] = top_keywords_sw
+        top_keywords_by_year_hw[year] = top_keywords_hw
+
+        df_sc['words'][year] = ", ".join([word for (word, count) in top_keywords_sc])
+        df_sw['words'][year] = ", ".join([word for (word, count) in top_keywords_sw])
+        df_hw['words'][year] = ", ".join([word for (word, count) in top_keywords_hw])
+
+    df_sc.to_csv('data/analysis/sc_term_freq.csv')
+    df_sw.to_csv('data/analysis/sw_term_freq.csv')
+    df_hw.to_csv('data/analysis/hw_term_freq.csv')
+
 def main():
+    
+    # classify_samples()
+
+    term_freq_analysis()
 
     #measure_stability(reupsample=True, ratio_noncomp_samples=0.0)
     #measure_stability(reupsample=True, ratio_noncomp_samples=1.0)
@@ -250,18 +445,17 @@ def main():
 
     #sweep_alphas(5, 40, 5)
 
-    Labeler(    addr_labeled_data='C:/Users/sthie/Documents/label-maker/data/recall_labeled.csv', 
-                addr_unlabeled_data='C:/Users/sthie/Documents/label-maker/data/recall_unlabeled.csv', 
-                addr_weights='C:/Users/sthie/Documents/label-maker/data/weighted-dictionary.pk1'
-    ).run()
+    # Labeler().run()
 
-    #data_labeled = pd.read_csv('../data/recall_labeled.csv')
-    #data_ss_labeled = pd.read_csv('../data/data-ss-labeled_800.csv')
+    #data_labeled = pd.read_csv('data/recall_labeled.csv')
+    #data_ss_labeled = pd.read_csv('data/data-ss-labeled_800.csv')
 
     #print("--- True Labels ---")
     #print_stats(data_labeled)
 
     #print("--- Model Labels ---")
     #print_stats(data_ss_labeled)
+
+    # test_performance(alpha=0, fold_count=8, sample_count=567, ratio_noncomp_samples=0.76, addr_out='data/performance/test_out.csv')
 
 main()

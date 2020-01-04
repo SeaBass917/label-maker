@@ -21,7 +21,7 @@ class WD():
 
     # 
     def __init__(self, 
-                addr_weights='../data/weighted-dictionary.pk1',
+                addr_weights='data/weighted-dictionary.pk1',
                 alpha=0):
         
         self.addr_weights = addr_weights
@@ -54,7 +54,7 @@ class WD():
         return self.weighted_dict.get(key)
 
     # save the dictionary to a local file
-    def save_weights(self, addr_weights='../data/weighted-dictionary.pk1'):
+    def save_weights(self, addr_weights='data/weighted-dictionary.pk1'):
 
         # Use the class addr if it is non null
         save_addr = ''
@@ -67,7 +67,7 @@ class WD():
             pk.dump(self.weighted_dict, f, pk.HIGHEST_PROTOCOL)
 
     # read the dictionary from a local file
-    def load_weights(self, addr_weights='../data/weighted-dictionary.pk1'):
+    def load_weights(self, addr_weights='data/weighted-dictionary.pk1'):
 
         # Use the class addr if it is non null
         load_addr = ''
@@ -83,7 +83,7 @@ class WD():
                 self.my_stopwords_SC, self.my_stopwords_HW, self.my_stopwords_SW = self.get_stop_words()   # get stopwords at this point
                 success = True
         except:
-            print('\tWarning!: No dictionary found at: \"', load_addr, '\".')
+            print('\tWarning!: No dictionary found at: \"'+load_addr+'\".')
             self.weighted_dict = {}
 
         return success
@@ -526,7 +526,7 @@ class WD():
 
         # default to this location
         if addr_newlabels == None:
-            addr_newlabels = '../data/data-ss-labeled_'+str(sample_count)+'.csv'
+            addr_newlabels = 'data/data-ss-labeled_'+str(sample_count)+'.csv'
 
         print("\t Calculating weights...", end='')
         weighted_dict = self.get_weighted_dict(data_labeled_subset)

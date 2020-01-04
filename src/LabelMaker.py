@@ -19,9 +19,9 @@ class Labeler():
 
     # initialize the vocabulary with the address of the corpus we will be labeling
     def __init__(self, 
-                addr_labeled_data='../data/recall_labeled.csv', 
-                addr_unlabeled_data='../data/recall_unlabeled.csv', 
-                addr_weights='../data/weighted-dictionary.pk1'):
+                addr_labeled_data='data/recall_labeled.csv', 
+                addr_unlabeled_data='data/recall_unlabeled.csv', 
+                addr_weights='data/weighted-dictionary.pk1'):
 
         # location in filesystem for the datasets
         self.addr_labeled_data = addr_labeled_data

@@ -58,12 +58,12 @@ def tokenize(sentance):
 def isolate_labeled():
     
     # read in the labeled and unlabeled dataset
-    df = pd.read_csv('../data/recall.csv')
+    df = pd.read_csv('data/recall.csv')
 
     # isolate the two
     df_labeled = df.ix[~np.isnan(df['SC'])]
     df_unlabeled = df.ix[np.isnan(df['SC'])]
 
     # write them back to respective files
-    df_labeled.to_csv('../data/recall_labeled.csv', index=None)
-    df_unlabeled.to_csv('../data/recall_unlabeled.csv', index=None)
+    df_labeled.to_csv('data/recall_labeled.csv', index=None)
+    df_unlabeled.to_csv('data/recall_unlabeled.csv', index=None)
