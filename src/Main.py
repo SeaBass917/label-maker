@@ -276,6 +276,9 @@ def term_freq_analysis(data_labeled_from_model_addr='data/recall_labeled_from_mo
     # seperate hist for each class
     # determing most popular words for each year
     # store in dict with year key
+    hist_global_sc = {}
+    hist_global_sw = {}
+    hist_global_hw = {}
     hist_by_year_sc = {}
     hist_by_year_sw = {}
     hist_by_year_hw = {}
@@ -306,6 +309,11 @@ def term_freq_analysis(data_labeled_from_model_addr='data/recall_labeled_from_mo
                     hist[word] += 1
                 else:
                     hist[word] = 1
+                
+                if word in hist_global_sc:
+                    hist_global_sc[word] += 1
+                else:
+                    hist_global_sc[word] = 1
 
             hist_by_year_sc[year] = hist
             
@@ -317,6 +325,11 @@ def term_freq_analysis(data_labeled_from_model_addr='data/recall_labeled_from_mo
                     hist[word] += 1
                 else:
                     hist[word] = 1
+                
+                if word in hist_global_sw:
+                    hist_global_sw[word] += 1
+                else:
+                    hist_global_sw[word] = 1
 
             hist_by_year_sw[year] = hist
             
@@ -328,10 +341,14 @@ def term_freq_analysis(data_labeled_from_model_addr='data/recall_labeled_from_mo
                     hist[word] += 1
                 else:
                     hist[word] = 1
+                
+                if word in hist_global_hw:
+                    hist_global_hw[word] += 1
+                else:
+                    hist_global_hw[word] = 1
 
             hist_by_year_hw[year] = hist
             
-
     # dataframes to be filled for each class and output of this function
     df_sc = pd.DataFrame({
         'words': [0 for year in years]
@@ -427,6 +444,35 @@ def term_freq_analysis(data_labeled_from_model_addr='data/recall_labeled_from_mo
     df_sc.to_csv('data/analysis/sc_term_freq.csv')
     df_sw.to_csv('data/analysis/sw_term_freq.csv')
     df_hw.to_csv('data/analysis/hw_term_freq.csv')
+
+    # create and sort a list of keywords with freqs
+    top_keywords_global_sc = [(word, hist_global_sc[word]) for word in hist_global_sc.keys()]
+    top_keywords_global_sw = [(word, hist_global_sw[word]) for word in hist_global_sw.keys()]
+    top_keywords_global_hw = [(word, hist_global_hw[word]) for word in hist_global_hw.keys()]
+
+    top_keywords_global_sc.sort(key=lambda x: x[1], reverse=True)
+    top_keywords_global_sw.sort(key=lambda x: x[1], reverse=True)
+    top_keywords_global_hw.sort(key=lambda x: x[1], reverse=True)
+
+    # print them out to a local csv file
+    strOut_sc = ''
+    for (word, count) in top_keywords_global_sc:
+        strOut_sc += word + ', ' + str(count) + '\n'
+    with open('data/analysis/sc_global_keyword_hist.csv', mode='w') as file:
+        file.write(strOut_sc)
+
+    strOut_sw = ''
+    for (word, count) in top_keywords_global_sw:
+        strOut_sw += word + ', ' + str(count) + '\n'
+    with open('data/analysis/sw_global_keyword_hist.csv', mode='w') as file:
+        file.write(strOut_sw)
+
+    strOut_hw = ''
+    for (word, count) in top_keywords_global_hw:
+        strOut_hw += word + ', ' + str(count) + '\n'
+    with open('data/analysis/hw_global_keyword_hist.csv', mode='w') as file:
+        file.write(strOut_hw)
+
 
 def main():
     
