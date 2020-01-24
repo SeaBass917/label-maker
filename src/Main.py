@@ -260,6 +260,28 @@ def classify_samples(data_unlabeled_addr='data/recall_unlabeled.csv'):
 def term_freq_analysis(data_labeled_from_model_addr='data/recall_labeled_from_model.csv',
                         data_labeled_addr='data/recall_labeled.csv'):
 
+    software_kwoi = [
+        ['anomoly'],
+        ['image', 'imaging'],
+        ['interface', 'gui'],
+        ['version', 'v'],
+        ['protocol', 'message']
+    ]
+    hardware_kwoi = [
+        ['defective', 'damaged'],
+        ['battery', 'power', 'charge', 'energy', 'voltage', 'charging', 'charger'],
+        ['board', 'circuit', 'capacitor', 'wiring', 'pcb'],
+        ['alarm'],
+        ['monitor', 'display']
+    ]
+    security_kwoi = [
+        ['error'],
+        ['sent', 'transfer', 'recieved'],
+        ['deleted', 'corrupted'],
+        ['anomaly'],
+        ['data', 'file', 'information', 'disk', 'archive', 'record']
+    ]
+
     # read both the samples labeled
     df_man = pd.read_csv(data_labeled_addr)
     df_auto = pd.read_csv(data_labeled_from_model_addr)
@@ -473,12 +495,141 @@ def term_freq_analysis(data_labeled_from_model_addr='data/recall_labeled_from_mo
     with open('data/analysis/hw_global_keyword_hist.csv', mode='w') as file:
         file.write(strOut_hw)
 
+# given this list of keywords of interest
+def term_freq_analysis_narrow(data_labeled_from_model_addr='data/recall_labeled_from_model.csv',
+                        data_labeled_addr='data/recall_labeled.csv'):
 
-def main():
+    software_kwoi = [
+        set(['anomaly']),
+        set(['image', 'imaging']),
+        set(['interface', 'gui']),
+        set(['version', 'v']),
+        set(['protocol', 'message'])
+    ]
+    hardware_kwoi = [
+        set(['defective', 'damaged']),
+        set(['battery', 'power', 'charge', 'energy', 'voltage', 'charging', 'charger']),
+        set(['board', 'circuit', 'capacitor', 'wiring', 'pcb']),
+        set(['alarm']),
+        set(['monitor', 'display'])
+    ]
+    security_kwoi = [
+        set(['error']),
+        set(['sent', 'transfer', 'recieved']),
+        set(['deleted', 'corrupted']),
+        set(['anomaly']),
+        set(['data', 'file', 'information', 'disk', 'archive', 'record'])
+    ]
+
+    # read both the samples labeled
+    df_man = pd.read_csv(data_labeled_addr)
+    df_auto = pd.read_csv(data_labeled_from_model_addr)
+
+    # combine them
+    data = pd.concat([df_man, df_auto], ignore_index=True)
+
+    # determine number of years
+    # it should be 17, from 2002 to 2018
+    years = data['YEAR']
+    years = years.drop_duplicates()
+    numYears = years.shape[0]
+
+    # seperate hist for each class
+    # determing most popular words for each year
+    # store in dict with year key
+    hist_by_year_sc = {}
+    hist_by_year_sw = {}
+    hist_by_year_hw = {}
+    for year in years:
+        hist_by_year_sc[year] = [0, 0, 0, 0, 0]
+        hist_by_year_sw[year] = [0, 0, 0, 0, 0]
+        hist_by_year_hw[year] = [0, 0, 0, 0, 0]
+
+    # go through each sample
+    # update hist by year and class
+    for i, row in data.iterrows():
+
+        # read the row
+        year = row['YEAR']
+        sentance = row['MANUFACTURER_RECALL_REASON']
+        label_SC = row['SC']
+        label_SW = row['SW']
+        label_HW = row['HW']
+
+        wordSet = set(tokenize(sentance))
+
+        # for each class update the hist
+        if label_SC == 1:
+
+            # Read hist into local mem
+            hist = hist_by_year_sc[year]
+
+            # For each keyword of interest if there exists some non-zero overlap in words 
+            # increment the counter for that set
+            for j, kwoi_j in enumerate(security_kwoi):
+                if len(wordSet.intersection(kwoi_j)) > 0:
+                    hist[j]+=1
+
+            # Write back to main mem
+            hist_by_year_sc[year] = hist
+            
+        if label_SW == 1:
+
+            # Read hist into local mem
+            hist = hist_by_year_sw[year]
+
+            # For each keyword of interest if there exists some non-zero overlap in words 
+            # increment the counter for that set
+            for j, kwoi_j in enumerate(software_kwoi):
+                if len(wordSet.intersection(kwoi_j)) > 0:
+                    hist[j]+=1
+
+            # Write back to main mem
+            hist_by_year_sw[year] = hist
+            
+        if label_HW == 1:
+
+            # Read hist into local mem
+            hist = hist_by_year_hw[year]
+
+            # For each keyword of interest if there exists some non-zero overlap in words 
+            # increment the counter for that set
+            for j, kwoi_j in enumerate(hardware_kwoi):
+                if len(wordSet.intersection(kwoi_j)) > 0:
+                    hist[j]+=1
+
+            # Write back to main mem
+            hist_by_year_hw[year] = hist
+            
+    # dataframes to be filled for each class and output of this function
+    obj = {}
+    for j, kwoi_j in enumerate(security_kwoi):
+        wordStr = ",".join(kwoi_j)
+        obj[wordStr] = [hist_by_year_sc[year][j] for year in years]
+    df_sc = pd.DataFrame(obj, index=years)
+
+    obj = {}
+    for j, kwoi_j in enumerate(software_kwoi):
+        wordStr = ",".join(kwoi_j)
+        obj[wordStr] = [hist_by_year_sw[year][j] for year in years]
+    df_sw = pd.DataFrame(obj, index=years)
+
+    obj = {}
+    for j, kwoi_j in enumerate(hardware_kwoi):
+        wordStr = ",".join(kwoi_j)
+        obj[wordStr] = [hist_by_year_hw[year][j] for year in years]
+    df_hw = pd.DataFrame(obj, index=years)
+
+    df_sc.to_csv('data/analysis/sc_termofinterest_freq.csv')
+    df_sw.to_csv('data/analysis/sw_termofinterest_freq.csv')
+    df_hw.to_csv('data/analysis/hw_termofinterest_freq.csv')
+
+
+if __name__ == "__main__":
     
     # classify_samples()
 
-    term_freq_analysis()
+    term_freq_analysis_narrow()
 
     #measure_stability(reupsample=True, ratio_noncomp_samples=0.0)
     #measure_stability(reupsample=True, ratio_noncomp_samples=1.0)
@@ -503,5 +654,3 @@ def main():
     #print_stats(data_ss_labeled)
 
     # test_performance(alpha=0, fold_count=8, sample_count=567, ratio_noncomp_samples=0.76, addr_out='data/performance/test_out.csv')
-
-main()
